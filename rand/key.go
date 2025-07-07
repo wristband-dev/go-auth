@@ -1,3 +1,4 @@
+// Package rand provides functions to generate random strings and keys.
 package rand
 
 import (

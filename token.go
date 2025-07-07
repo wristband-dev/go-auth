@@ -1,4 +1,4 @@
-package go_auth
+package goauth
 
 import (
 	"encoding/json"
@@ -146,7 +146,7 @@ func (req TokenRequest) Validate() error {
 	return nil
 }
 
-func (req TokenRequest) newHttpRequest() (*http.Request, error) {
+func (req TokenRequest) newHTTPRequest() (*http.Request, error) {
 	data := url.Values{}
 	data.Set("grant_type", string(req.GrantType))
 	switch req.GrantType {
@@ -188,7 +188,7 @@ func (req TokenRequest) Do(httpClient *http.Client) (TokenResponse, error) {
 	}
 
 	// Create the HTTP request
-	httpReq, err := req.newHttpRequest()
+	httpReq, err := req.newHTTPRequest()
 	if err != nil {
 		return TokenResponse{}, err
 	}
@@ -224,7 +224,7 @@ func (req TokenRequest) Do(httpClient *http.Client) (TokenResponse, error) {
 func (auth WristbandAuth) RefreshAccessToken(refreshToken string, scopes ...string) (TokenResponse, error) {
 	req := NewTokenRequest(TokenRequestConfig{
 		Client:   auth.Client,
-		Endpoint: auth.tokenUrl,
+		Endpoint: auth.tokenURL,
 		Scopes:   scopes,
 	}, WithRefreshToken(refreshToken))
 	return req.Do(auth.httpClient)

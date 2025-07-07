@@ -1,4 +1,4 @@
-package go_auth
+package goauth
 
 import (
 	"net/http"
@@ -11,9 +11,9 @@ type (
 		EncryptCookieValue(name, value string) (string, error)
 	}
 
-	// HttpContext represents the context of an HTTP request and response.
+	// HTTPContext represents the context of an HTTP request and response.
 	// Web frameworks not based on the standard library should implement this interface to use this package.
-	HttpContext interface {
+	HTTPContext interface {
 		// Query returns a QueryValueResolver that can be used to access query parameters of the request.
 		Query() QueryValueResolver
 		// CookieRequest returns a CookieRequest interface for reading cookies.
@@ -25,18 +25,19 @@ type (
 	}
 )
 
-type StandardHttp struct {
+// StandardHTTP implements the HTTPContext interface for standard library HTTP requests and responses.
+type StandardHTTP struct {
 	req              *http.Request
 	res              http.ResponseWriter
 	cookieOpts       CookieOptions
 	cookieEncryption CookieEncryption
 }
 
-func (std *StandardHttp) Query() QueryValueResolver {
+func (std *StandardHTTP) Query() QueryValueResolver {
 	return std.req.URL.Query()
 }
 
-func (std *StandardHttp) WriteCookie(name, value string) error {
+func (std *StandardHTTP) WriteCookie(name, value string) error {
 	cookie := http.Cookie{
 		Name:     name,
 		Value:    value,
@@ -50,11 +51,11 @@ func (std *StandardHttp) WriteCookie(name, value string) error {
 	return cookies.WriteCookie(std.res, cookie)
 }
 
-func (std *StandardHttp) CookieRequest() cookies.CookieRequest {
+func (std *StandardHTTP) CookieRequest() cookies.CookieRequest {
 	return cookies.StandardRequest(std.req)
 }
 
-func (std *StandardHttp) ClearCookie(name string) {
+func (std *StandardHTTP) ClearCookie(name string) {
 	cookie := &http.Cookie{
 		Name:     name,
 		Value:    "",

@@ -1,4 +1,4 @@
-package go_auth
+package goauth
 
 import (
 	"encoding/json"
@@ -31,7 +31,7 @@ func DefaultLoginOptions() *LoginOptions {
 	}
 }
 
-func (auth WristbandAuth) HandleLogin(httpCtx HttpContext, callbackURL string, options *LoginOptions) (string, error) {
+func (auth WristbandAuth) HandleLogin(httpCtx HTTPContext, callbackURL string, options *LoginOptions) (string, error) {
 	// Create login state with nonce, PKCE code verifier, etc.
 	state := CreateLoginState(httpCtx.Query(), options)
 
@@ -80,7 +80,7 @@ type CallbackContext struct {
 	UserInfo      UserInfoResponse
 }
 
-func (auth WristbandAuth) HandleCallback(ctx HttpContext, callbackUrl string) (*CallbackContext, error) {
+func (auth WristbandAuth) HandleCallback(ctx HTTPContext, callbackURL string) (*CallbackContext, error) {
 	queryValues := ctx.Query()
 	if err := RequestError(queryValues); err != nil {
 		return nil, err
@@ -96,14 +96,13 @@ func (auth WristbandAuth) HandleCallback(ctx HttpContext, callbackUrl string) (*
 
 	tokenReq := NewTokenRequest(
 		auth.TokenRequestConf(),
-		WithAuthCode(inputs.Code, loginState.CodeVerifier, callbackUrl),
+		WithAuthCode(inputs.Code, loginState.CodeVerifier, callbackURL),
 	)
 
 	// Exchange code for tokens
 	tokenResponse, err := tokenReq.Do(auth.httpClient)
 	if err != nil {
 		return nil, fmt.Errorf("failed to exchange code for tokens: %v", err)
-
 	}
 
 	// Get user info with access token

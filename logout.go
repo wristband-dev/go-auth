@@ -1,4 +1,4 @@
-package go_auth
+package goauth
 
 import (
 	"fmt"
@@ -7,8 +7,8 @@ import (
 
 // LogoutURL builds the logout URL for redirecting to Wristband
 func (auth WristbandAuth) LogoutURL(queryValues QueryValueResolver) string {
-	baseUrl := auth.Domains.TenantedHost(queryValues)
-	if baseUrl == "" {
+	baseURL := auth.Domains.TenantedHost(queryValues)
+	if baseURL == "" {
 		if auth.logoutRedirectURI != "" {
 			return auth.logoutRedirectURI
 		}
@@ -22,5 +22,5 @@ func (auth WristbandAuth) LogoutURL(queryValues QueryValueResolver) string {
 		params.Set("post_logout_redirect_uri", auth.logoutRedirectURI)
 	}
 
-	return baseUrl + DefaultLogoutEndpoint + "?" + params.Encode()
+	return baseURL + DefaultLogoutEndpoint + "?" + params.Encode()
 }

@@ -1,4 +1,4 @@
-package go_auth
+package goauth
 
 import (
 	"fmt"
@@ -15,7 +15,7 @@ func NewWristbandAuth(client ConfidentialClient, domains AppDomains, opts ...App
 		userInfoEndpoint:  DefaultUserInfoEndpoint,
 		logoutEndpoint:    DefaultLogoutEndpoint,
 		revokeEndpoint:    DefaultRevokeEndpoint,
-		endpointRoot:      domains.WristbandDomain + DefaultApiPath,
+		endpointRoot:      domains.WristbandDomain + DefaultAPIPath,
 		httpClient:        http.DefaultClient,
 		tokenExpiryBuffer: DefaultTokenExpiryBuffer,
 	}
@@ -24,7 +24,7 @@ func NewWristbandAuth(client ConfidentialClient, domains AppDomains, opts ...App
 		opt.apply(&auth)
 	}
 
-	auth.tokenUrl = fmt.Sprintf("https://%s", auth.endpointRoot+auth.tokenEndpoint)
+	auth.tokenURL = fmt.Sprintf("https://%s", auth.endpointRoot+auth.tokenEndpoint)
 
 	return auth
 }
@@ -53,7 +53,7 @@ type WristbandAuth struct {
 	tokenExpiryBuffer int // seconds
 
 	cookieEncryption CookieEncryption
-	tokenUrl         string
+	tokenURL         string
 }
 
 func (auth WristbandAuth) ResolveLogoutEndpoint(values QueryValueResolver) string {
@@ -91,7 +91,7 @@ func (auth WristbandAuth) CodeTokenRequest(code, codeVerifier, redirectURI strin
 func (auth WristbandAuth) TokenRequestConf() TokenRequestConfig {
 	return TokenRequestConfig{
 		Client:   auth.Client,
-		Endpoint: auth.tokenUrl,
+		Endpoint: auth.tokenURL,
 	}
 }
 
@@ -101,6 +101,13 @@ func (auth WristbandAuth) RevokeEndpoint() string {
 
 type AppOption interface {
 	apply(*WristbandAuth)
+}
+
+// WithHTTPClient allows setting a custom HTTP client for the remote requests.
+func WithHTTPClient(client *http.Client) AppOption {
+	return appOptionFunc(func(c *WristbandAuth) {
+		c.httpClient = client
+	})
 }
 
 type appOptionFunc func(*WristbandAuth)

@@ -1,4 +1,4 @@
-package go_auth
+package goauth
 
 import (
 	"context"
@@ -37,20 +37,20 @@ type (
 
 type WristbandApp struct {
 	WristbandAuth
-	LoginPath         string
-	CallbackURL       string
-	logoutRedirectURL string
-	SessionManager    SessionManager
-	cookieOpts        CookieOptions
-	cookieEncryption  CookieEncryption
+	LoginPath        string
+	CallbackURL      string
+	SessionManager   SessionManager
+	cookieOpts       CookieOptions
+	cookieEncryption CookieEncryption
 }
 
 func (app WristbandApp) LoginEndpoint() string {
 	return app.Domains.WristbandDomain + app.LoginPath
 }
 
-func (app WristbandApp) HttpContext(res http.ResponseWriter, req *http.Request) HttpContext {
-	return &StandardHttp{
+// HTTPContext creates a new HTTPContext for the standard library request and response.
+func (app WristbandApp) HTTPContext(res http.ResponseWriter, req *http.Request) HTTPContext {
+	return &StandardHTTP{
 		req:              req,
 		res:              res,
 		cookieOpts:       app.cookieOpts,
@@ -69,7 +69,7 @@ func (app WristbandApp) LoginHandler(opts ...func(*LoginOptions)) http.HandlerFu
 		res.Header().Set("Cache-Control", "no-cache, no-store")
 		res.Header().Set("Pragma", "no-cache")
 
-		httpCtx := app.HttpContext(res, req)
+		httpCtx := app.HTTPContext(res, req)
 		// Build authorization URL
 		authURL, err := app.HandleLogin(httpCtx, app.CallbackURL, options)
 		if err != nil {
@@ -84,9 +84,9 @@ func (app WristbandApp) LoginHandler(opts ...func(*LoginOptions)) http.HandlerFu
 // CallbackHandler creates a middleware for handling the OAuth callback
 func (app WristbandApp) CallbackHandler() http.HandlerFunc {
 	return func(res http.ResponseWriter, req *http.Request) {
-		ctx := app.HttpContext(res, req)
+		ctx := app.HTTPContext(res, req)
 		// Create session
-		callbackContext, err := app.WristbandAuth.HandleCallback(ctx, app.CallbackURL)
+		callbackContext, err := app.HandleCallback(ctx, app.CallbackURL)
 		if err != nil {
 			http.Error(res, "Failed to store session", http.StatusInternalServerError)
 			return

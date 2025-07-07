@@ -26,7 +26,7 @@ func TestGenerateRandomString(t *testing.T) {
 		results := make(map[string]bool)
 		iterations := 100
 
-		for i := 0; i < iterations; i++ {
+		for range iterations {
 			result := GenerateRandomString(length)
 			if results[result] {
 				t.Errorf("Generated duplicate random string: %s", result)
@@ -79,7 +79,7 @@ func TestGenerateRandomCookieName(t *testing.T) {
 		results := make(map[string]bool)
 		iterations := 50
 
-		for i := 0; i < iterations; i++ {
+		for range iterations {
 			result := GenerateRandomCookieName(length)
 			if results[result] {
 				t.Errorf("Generated duplicate cookie name: %s", result)
@@ -196,7 +196,7 @@ func TestGenerateRandomKey(t *testing.T) {
 		results := make(map[string]bool)
 		iterations := 100
 
-		for i := 0; i < iterations; i++ {
+		for range iterations {
 			result := GenerateRandomKey(length)
 			resultStr := string(result)
 			if results[resultStr] {
@@ -254,7 +254,7 @@ func TestRandomnessFunctions(t *testing.T) {
 		cookieResults := make(map[string]bool)
 		keyResults := make(map[string]bool)
 
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			stringResult := GenerateRandomString(length)
 			cookieResult := GenerateRandomCookieName(length)
 			keyResult := string(GenerateRandomKey(length))

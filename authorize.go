@@ -1,4 +1,4 @@
-package go_auth
+package goauth
 
 import (
 	"net/url"
@@ -26,10 +26,10 @@ type AuthorizeRequestOption interface {
 var defaultScopes = []string{"openid", "offline_access", "email"}
 
 // NewAuthorizeRequest builds the authorization request for redirecting to Wristband
-func (auth WristbandAuth) NewAuthorizeRequest(callbackUrl, state string, opts ...AuthorizeRequestOption) *AuthorizeRequest {
+func (auth WristbandAuth) NewAuthorizeRequest(callbackURL, state string, opts ...AuthorizeRequestOption) *AuthorizeRequest {
 	req := &AuthorizeRequest{
 		State:        state,
-		RedirectURI:  callbackUrl,
+		RedirectURI:  callbackURL,
 		Scopes:       defaultScopes,
 		Client:       auth.Client,
 		Domains:      auth.Domains,

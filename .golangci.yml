@@ -8,7 +8,6 @@ linters:
     - bodyclose
     - containedctx
     - gocheckcompilerdirectives
-    - gosimple
     - govet
     - ineffassign
     - intrange
@@ -30,6 +29,8 @@ linters:
       checks:
         - all
         - -SA1019 # omit Deprecated check
+        - -QF1001
+        - -ST1003
 formatters:
   enable:
     - gci

@@ -1,4 +1,4 @@
-package go_auth
+package goauth
 
 import (
 	"fmt"
@@ -18,7 +18,7 @@ const (
 	DefaultLogoutEndpoint    = "/logout"
 	DefaultRevokeEndpoint    = "/oauth2/revoke"
 
-	DefaultApiPath = "/api/v1"
+	DefaultAPIPath = "/api/v1"
 )
 
 type (

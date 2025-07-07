@@ -1,4 +1,4 @@
-package go_auth
+package goauth
 
 type (
 	// QuerierValueResolver is an implementation of QueryValueResolver that by wrapping a Querier.

@@ -1,3 +1,4 @@
+// Package cookies provides functionality for reading and writing secure cookies.
 package cookies
 
 import (
