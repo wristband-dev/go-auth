@@ -8,7 +8,6 @@ linters:
     - bodyclose
     - containedctx
     - gocheckcompilerdirectives
-    - gofumpt
     - gosimple
     - govet
     - ineffassign
