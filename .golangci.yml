@@ -1,71 +1,35 @@
 version: "2"
 linters:
   enable:
-    - asciicheck
-    - copyloopvar
-    - dogsled
-    - durationcheck
-    - errorlint
-    - gosec
+    - asasalint
+    - bidichk
+    - bodyclose
+    - containedctx
+    - gocheckcompilerdirectives
+    - gofmt
+    - gofumpt
+    - gosimple
+    - govet
+    - ineffassign
+    - intrange
+    - makezero
     - misspell
-    - nakedret
     - nilerr
     - nolintlint
-    - perfsprint
-    - revive
-    - testifylint
-    - usestdlibvars
+    - nosprintfhostport
+    - staticcheck
+    - unconvert
+    - usetesting
     - wastedassign
+    - whitespace
+  disable:
+    - errcheck
+    - usestdlibvars
   settings:
-    gosec:
-      includes:
-        - G102
-        - G106
-        - G108
-        - G109
-        - G111
-        - G112
-        - G201
-        - G203
-    perfsprint:
-      int-conversion: true
-      err-error: true
-      errorf: true
-      sprintf1: true
-      strconcat: true
-    testifylint:
-      enable-all: true
-  exclusions:
-    generated: lax
-    presets:
-      - comments
-      - common-false-positives
-      - legacy
-      - std-error-handling
-    rules:
-      - linters:
-          - structcheck
-          - unused
-        text: '`data` is unused'
-      - linters:
-          - staticcheck
-        text: 'SA1019:'
-      - linters:
-          - revive
-        text: 'var-naming:'
-      - linters:
-          - revive
-        text: 'exported:'
-      - linters:
-          - gosec
-        path: _test\.go
-      - linters:
-          - revive
-        path: _test\.go
-    paths:
-      - third_party$
-      - builtin$
-      - examples$
+    staticcheck:
+      checks:
+        - all
+        - -SA1019 # omit Deprecated check
 formatters:
   enable:
     - gci
@@ -77,10 +41,3 @@ formatters:
       rewrite-rules:
         - pattern: 'interface{}'
           replacement: 'any'
-  exclusions:
-    generated: lax
-    paths:
-      - third_party$
-      - builtin$
-      - examples$
-      - gin.go
