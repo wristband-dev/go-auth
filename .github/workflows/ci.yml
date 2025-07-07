@@ -19,8 +19,9 @@ jobs:
           cache-dependency-path: "**/go.sum"
 
       - name: Run linters
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v8
         with:
+          version: v2.1.6
           args: --verbose
   build:
     runs-on: ubuntu-latest
