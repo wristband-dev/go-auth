@@ -1,0 +1,51 @@
+name: Tests
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v4
+
+      - name: Set up Go Version
+        uses: actions/setup-go@v5
+        with:
+          go-version: 1.24.3
+          cache-dependency-path: "**/go.sum"
+
+      - name: Run linters
+        uses: golangci/golangci-lint-action@v6
+        with:
+          args: --verbose
+  build:
+    runs-on: ubuntu-latest
+    environment: build
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v4
+
+      - name: Set up Go Version
+        uses: actions/setup-go@v5
+        with:
+          go-version: 1.24.3
+          cache-dependency-path: "**/go.sum"
+
+      - name: Check formatting
+        run: |
+          gofmt -l -s -w .
+          git status
+          git diff --exit-code
+
+      - name: Test
+        run: |
+          go test ./...
+          git status
+          git diff --exit-code
