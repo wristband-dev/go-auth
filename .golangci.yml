@@ -17,6 +17,7 @@ linters:
     - nolintlint
     - nosprintfhostport
     - staticcheck
+    - revive
     - unconvert
     - usetesting
     - wastedassign

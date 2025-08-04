@@ -31,6 +31,7 @@ func DefaultLoginOptions() *LoginOptions {
 	}
 }
 
+// HandleLogin initiates the login process by creating a login state and returning the authorization url.
 func (auth WristbandAuth) HandleLogin(httpCtx HTTPContext, callbackURL string, options *LoginOptions) (string, error) {
 	// Create login state with nonce, PKCE code verifier, etc.
 	state := CreateLoginState(httpCtx.Query(), options)
@@ -70,16 +71,19 @@ func CreateLoginState(queryValues QueryValueResolver, options *LoginOptions) Log
 	}
 }
 
+// CookieName returns the name of the cookie used to store the login state.
 func (state LoginState) CookieName() string {
 	return loginStateCookieName(state.StateCookieKey)
 }
 
+// CallbackContext contains contextual information retrieved in the callback endpoint.
 type CallbackContext struct {
 	TokenResponse TokenResponse
 	LoginState    LoginState
 	UserInfo      UserInfoResponse
 }
 
+// HandleCallback processes the OAuth callback, exchanges the authorization code for tokens.
 func (auth WristbandAuth) HandleCallback(ctx HTTPContext, callbackURL string) (*CallbackContext, error) {
 	queryValues := ctx.Query()
 	if err := RequestError(queryValues); err != nil {
@@ -111,7 +115,7 @@ func (auth WristbandAuth) HandleCallback(ctx HTTPContext, callbackURL string) (*
 		return nil, fmt.Errorf("failed to get user info: %v", err)
 	}
 
-	// Create session
+	// Create callback context with token response, login state, and user info
 	return &CallbackContext{
 		TokenResponse: tokenResponse,
 		LoginState:    loginState,
@@ -119,6 +123,7 @@ func (auth WristbandAuth) HandleCallback(ctx HTTPContext, callbackURL string) (*
 	}, nil
 }
 
+// Session returns a *Session object from the callback context.
 func (ctx CallbackContext) Session() *Session {
 	expiresAt := time.Now().Add(time.Second * time.Duration(ctx.TokenResponse.ExpiresIn))
 	return &Session{

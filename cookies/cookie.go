@@ -29,8 +29,25 @@ func NewConfidentialSigner(secretKey []byte) ConfidentialCookieSigner {
 	if secretKey == nil {
 		secretKey = rand.GenerateRandomKey(32)
 	}
+	// Create a new AES cipher block from the secret key.
+	block, err := aes.NewCipher(secretKey)
+	if err != nil {
+		return ConfidentialCookieSigner{
+			SecretKey: secretKey,
+		}
+	}
+
+	// Wrap the cipher block in Galois Counter Mode.
+	aesGCM, err := cipher.NewGCM(block)
+	if err != nil {
+		return ConfidentialCookieSigner{
+			SecretKey: secretKey,
+		}
+	}
 	return ConfidentialCookieSigner{
 		SecretKey: secretKey,
+		block:     block,
+		aesGCM:    aesGCM,
 	}
 }
 
@@ -38,11 +55,13 @@ func NewConfidentialSigner(secretKey []byte) ConfidentialCookieSigner {
 type ConfidentialCookieSigner struct {
 	// SecretKey is the key used for the encryption.
 	SecretKey []byte
+	block     cipher.Block
+	aesGCM    cipher.AEAD
 }
 
 func WriteCookie(w http.ResponseWriter, cookie http.Cookie) error {
 	// Encode the cookie value using base64.
-	cookie.Value = base64.URLEncoding.EncodeToString([]byte(cookie.Value))
+	// cookie.Value = base64.URLEncoding.EncodeToString([]byte(cookie.Value))
 
 	// Check the total length of the cookie contents. Return the ErrValueTooLong
 	// error if it's more than 4096 bytes.
@@ -169,20 +188,8 @@ func ReadSigned(r CookieRequest, name string, secretKey []byte) (string, error) 
 }
 
 func (s ConfidentialCookieSigner) EncryptCookieValue(name, value string) (string, error) {
-	// Create a new AES cipher block from the secret key.
-	block, err := aes.NewCipher(s.SecretKey)
-	if err != nil {
-		return "", err
-	}
-
-	// Wrap the cipher block in Galois Counter Mode.
-	aesGCM, err := cipher.NewGCM(block)
-	if err != nil {
-		return "", err
-	}
-
 	// Create a unique nonce containing 12 random bytes.
-	nonce := rand.GenerateRandomKey(aesGCM.NonceSize())
+	nonce := rand.GenerateRandomKey(s.aesGCM.NonceSize())
 
 	// Prepare the plaintext input for encryption. Because we want to
 	// authenticate the cookie name as well as the value, we make this plaintext
@@ -195,7 +202,7 @@ func (s ConfidentialCookieSigner) EncryptCookieValue(name, value string) (string
 	// parameter, the encrypted data will be appended to the nonce — meaning
 	// that the returned encryptedValue variable will be in the format
 	// "{nonce}{encrypted plaintext data}".
-	encryptedValue := aesGCM.Seal(nonce, nonce, []byte(plaintext), nil)
+	encryptedValue := s.aesGCM.Seal(nonce, nonce, []byte(plaintext), nil)
 
 	encodedValue := base64.URLEncoding.EncodeToString(encryptedValue)
 
@@ -251,20 +258,8 @@ func (s ConfidentialCookieSigner) ReadEncrypted(r CookieRequest, name string) (s
 		return "", err
 	}
 
-	// Create a new AES cipher block from the secret key.
-	block, err := aes.NewCipher(s.SecretKey)
-	if err != nil {
-		return "", err
-	}
-
-	// Wrap the cipher block in Galois Counter Mode.
-	aesGCM, err := cipher.NewGCM(block)
-	if err != nil {
-		return "", err
-	}
-
 	// Get the nonce size.
-	nonceSize := aesGCM.NonceSize()
+	nonceSize := s.aesGCM.NonceSize()
 
 	// To avoid a potential 'index out of range' panic in the next step, we
 	// check that the length of the encrypted value is at least the nonce
@@ -279,7 +274,7 @@ func (s ConfidentialCookieSigner) ReadEncrypted(r CookieRequest, name string) (s
 
 	// Use aesGCM.Open() to decrypt and authenticate the data. If this fails,
 	// return a ErrInvalidValue error.
-	plaintext, err := aesGCM.Open(nil, []byte(nonce), []byte(ciphertext), nil)
+	plaintext, err := s.aesGCM.Open(nil, []byte(nonce), []byte(ciphertext), nil)
 	if err != nil {
 		return "", ErrInvalidValue
 	}

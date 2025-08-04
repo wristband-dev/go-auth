@@ -7,10 +7,6 @@ import (
 )
 
 type (
-	CookieCrypto interface {
-		EncryptCookieValue(name, value string) (string, error)
-	}
-
 	// HTTPContext represents the context of an HTTP request and response.
 	// Web frameworks not based on the standard library should implement this interface to use this package.
 	HTTPContext interface {
@@ -33,10 +29,12 @@ type StandardHTTP struct {
 	cookieEncryption CookieEncryption
 }
 
+// Query returns a QueryValueResolver from the *http.Request.
 func (std *StandardHTTP) Query() QueryValueResolver {
 	return std.req.URL.Query()
 }
 
+// WriteCookie writes a cookie to the HTTP response using http.Cookie.
 func (std *StandardHTTP) WriteCookie(name, value string) error {
 	cookie := http.Cookie{
 		Name:     name,
@@ -51,10 +49,12 @@ func (std *StandardHTTP) WriteCookie(name, value string) error {
 	return cookies.WriteCookie(std.res, cookie)
 }
 
+// CookieRequest wraps the *http.Request to provide a CookieRequest interface for reading cookies.
 func (std *StandardHTTP) CookieRequest() cookies.CookieRequest {
 	return cookies.StandardRequest(std.req)
 }
 
+// ClearCookie clears a cookie from the HTTP response by setting its MaxAge to -1 and value to an empty string.
 func (std *StandardHTTP) ClearCookie(name string) {
 	cookie := &http.Cookie{
 		Name:     name,

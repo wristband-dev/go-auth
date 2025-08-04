@@ -46,6 +46,17 @@ type (
 	}
 )
 
+// Validate returns an error if the AppDomains configuration is invalid.
+func (domains AppDomains) Validate() error {
+	if domains.WristbandDomain == "" {
+		return fmt.Errorf("wristband domain is required")
+	}
+	if domains.RootDomain == "" {
+		return fmt.Errorf("root domain is required")
+	}
+	return nil
+}
+
 // RequestTenantedHost returns the base path for a tenanted http request.
 func (domains AppDomains) RequestTenantedHost(req *http.Request) string {
 	return domains.TenantedHost(req.URL.Query())

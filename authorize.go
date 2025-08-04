@@ -51,6 +51,7 @@ func (req AuthorizeRequest) AuthorizeURL(queryValues QueryValueResolver) string 
 	params.Set("redirect_uri", req.RedirectURI)
 	params.Set("response_type", "code")
 	params.Set("scope", strings.Join(req.Scopes, " "))
+	params.Set("state", req.State)
 	if req.Nonce != "" {
 		params.Set("nonce", req.Nonce)
 	}

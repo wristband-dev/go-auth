@@ -1,32 +1,63 @@
 package goauth
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
+
+	"github.com/wristband-dev/go-auth/cookies"
+	"github.com/wristband-dev/go-auth/rand"
 )
 
-func NewWristbandAuth(client ConfidentialClient, domains AppDomains, opts ...AppOption) WristbandAuth {
+type WristbandAuthConfig struct {
+	// Client is the confidential client used for authentication.
+	Client ConfidentialClient
+	// Domains provides the application domain configuration.
+	Domains AppDomains
+	// SecretKey is the key used for encrypting cookies.
+	// If empty, a random key will be generated. If set, it must be 32 bytes long.
+	SecretKey []byte
+}
+
+func NewWristbandAuth(cfg WristbandAuthConfig, opts ...AuthOption) (WristbandAuth, error) {
+	if err := cfg.Domains.Validate(); err != nil {
+		return WristbandAuth{}, fmt.Errorf("invalid domains configuration: %w", err)
+	}
+
+	if len(cfg.SecretKey) != 0 && len(cfg.SecretKey) != 32 {
+		return WristbandAuth{}, errors.New("secret key is must be exactly 32 bytes")
+	}
+
 	auth := WristbandAuth{
-		Client:            client,
-		Domains:           domains,
+		Client:            cfg.Client,
+		Domains:           cfg.Domains,
 		Scopes:            defaultScopes,
 		tokenEndpoint:     DefaultTokenEndpoint,
 		authorizeEndpoint: DefaultAuthorizeEndpoint,
 		userInfoEndpoint:  DefaultUserInfoEndpoint,
 		logoutEndpoint:    DefaultLogoutEndpoint,
 		revokeEndpoint:    DefaultRevokeEndpoint,
-		endpointRoot:      domains.WristbandDomain + DefaultAPIPath,
+		endpointRoot:      cfg.Domains.WristbandDomain + DefaultAPIPath,
 		httpClient:        http.DefaultClient,
 		tokenExpiryBuffer: DefaultTokenExpiryBuffer,
+		logoutRedirectURI: "/",
 	}
 
 	for _, opt := range opts {
 		opt.apply(&auth)
 	}
 
+	if auth.cookieEncryption == nil {
+		key := cfg.SecretKey
+		if len(key) == 0 {
+			key = rand.GenerateRandomKey(32)
+		}
+		auth.cookieEncryption = cookies.NewConfidentialSigner(key)
+	}
+
 	auth.tokenURL = fmt.Sprintf("https://%s", auth.endpointRoot+auth.tokenEndpoint)
 
-	return auth
+	return auth, nil
 }
 
 type WristbandAuth struct {
@@ -56,6 +87,7 @@ type WristbandAuth struct {
 	tokenURL         string
 }
 
+// ResolveLogoutEndpoint returns the logout endpoint URL for a given set of query values.
 func (auth WristbandAuth) ResolveLogoutEndpoint(values QueryValueResolver) string {
 	return auth.Domains.TenantedHost(values) + auth.logoutEndpoint
 }
@@ -99,19 +131,34 @@ func (auth WristbandAuth) RevokeEndpoint() string {
 	return auth.endpointRoot + auth.revokeEndpoint
 }
 
-type AppOption interface {
+// AuthOption is an interface for options that can be applied to modify the WristbandAuth configuration.
+type AuthOption interface {
 	apply(*WristbandAuth)
 }
 
 // WithHTTPClient allows setting a custom HTTP client for the remote requests.
-func WithHTTPClient(client *http.Client) AppOption {
-	return appOptionFunc(func(c *WristbandAuth) {
+func WithHTTPClient(client *http.Client) AuthOption {
+	return authOptionFunc(func(c *WristbandAuth) {
 		c.httpClient = client
 	})
 }
 
-type appOptionFunc func(*WristbandAuth)
+// WithLogoutRedirectURL allows setting the url that users will be redirected to when logging out.
+func WithLogoutRedirectURL(url string) AuthOption {
+	return authOptionFunc(func(c *WristbandAuth) {
+		c.logoutRedirectURI = url
+	})
+}
 
-func (f appOptionFunc) apply(c *WristbandAuth) {
+// WithCookieEncryption allows setting a custom CookieEncryption implementation.
+func WithCookieEncryption(cookieEncryption CookieEncryption) AuthOption {
+	return authOptionFunc(func(c *WristbandAuth) {
+		c.cookieEncryption = cookieEncryption
+	})
+}
+
+type authOptionFunc func(*WristbandAuth)
+
+func (f authOptionFunc) apply(c *WristbandAuth) {
 	f(c)
 }
