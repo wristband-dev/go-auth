@@ -21,6 +21,7 @@ func (e WristbandError) Error() string {
 	return fmt.Sprintf("%s: %s", e.Code, e.Message)
 }
 
+// InvalidCallbackQueryParameterError creates an InvalidCallbackError for an invalid query parameter.
 func InvalidCallbackQueryParameterError(parameter string) *InvalidCallbackError {
 	return &InvalidCallbackError{
 		Message: "query parameter " + parameter + " is invalid",
@@ -36,6 +37,7 @@ func (e InvalidCallbackError) Error() string {
 	return fmt.Sprintf("invalid request received from Wristband during callback: %s", e.Message)
 }
 
+// RequestError checks if the query values contain an error and returns a WristbandError if so.
 func RequestError(queryValues QueryValueResolver) error {
 	if queryValues == nil {
 		return nil

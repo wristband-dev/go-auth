@@ -16,7 +16,9 @@ import (
 )
 
 var (
+	// ErrValueTooLong is returned when a cookie value exceeds the maximum allowed length.
 	ErrValueTooLong = errors.New("cookie value too long")
+	// ErrInvalidValue is returned when a cookie value is not valid.
 	ErrInvalidValue = errors.New("invalid cookie value")
 )
 
@@ -26,6 +28,7 @@ type RequestContext interface {
 	WriteCookie(key, value string)
 }
 
+// NewConfidentialSigner creates a new ConfidentialCookieSigner with the provided secret key.
 func NewConfidentialSigner(secretKey []byte) ConfidentialCookieSigner {
 	if secretKey == nil {
 		secretKey = rand.GenerateRandomKey(32)
@@ -74,6 +77,7 @@ func WriteCookie(w http.ResponseWriter, cookie http.Cookie) error {
 	return nil
 }
 
+// RequestHandlerContext is an implementation of the RequestContext interface for the standard library HTTP request and response writer.
 type RequestHandlerContext struct {
 	request      *http.Request
 	w            http.ResponseWriter
@@ -82,6 +86,7 @@ type RequestHandlerContext struct {
 	CookieDomain string // optional
 }
 
+// ReadCookie reads a cookie from the request and decodes its value from base64.
 func (ctx RequestHandlerContext) ReadCookie(name string) (string, error) {
 	// Read the cookie as normal.
 	cookie, err := ctx.request.Cookie(name)
@@ -101,6 +106,7 @@ func (ctx RequestHandlerContext) ReadCookie(name string) (string, error) {
 	return string(value), nil
 }
 
+// WriteCookie writes a cookie to the HTTP response writer.
 func (ctx RequestHandlerContext) WriteCookie(key, value string) {
 	http.SetCookie(ctx.w, &http.Cookie{
 		Name:     key,
@@ -133,6 +139,7 @@ func ReadCookie(r CookieRequest, name string) (string, error) {
 	return string(value), nil
 }
 
+// WriteSigned writes a signed cookie to the HTTP response writer.
 func WriteSigned(w http.ResponseWriter, cookie http.Cookie, secretKey []byte) error {
 	// Calculate a HMAC signature of the cookie name and value, using SHA256 and
 	// a secret key (which we will create in a moment).
@@ -188,6 +195,7 @@ func ReadSigned(r CookieRequest, name string, secretKey []byte) (string, error) 
 	return value, nil
 }
 
+// EncryptCookieValue encrypts a cookie value using AES GCM encryption.
 func (s ConfidentialCookieSigner) EncryptCookieValue(name, value string) (string, error) {
 	// Create a unique nonce containing 12 random bytes.
 	nonce := rand.GenerateRandomKey(s.aesGCM.NonceSize())
@@ -216,6 +224,7 @@ func (s ConfidentialCookieSigner) EncryptCookieValue(name, value string) (string
 	return encodedValue, nil
 }
 
+// WriteEncrypted writes an encrypted cookie to the HTTP response writer.
 func (s ConfidentialCookieSigner) WriteEncrypted(w http.ResponseWriter, cookie http.Cookie) error {
 	// Create a new AES cipher block from the secret key.
 	block, err := aes.NewCipher(s.SecretKey)
@@ -252,6 +261,7 @@ func (s ConfidentialCookieSigner) WriteEncrypted(w http.ResponseWriter, cookie h
 	return WriteCookie(w, cookie)
 }
 
+// ReadEncrypted reads an encrypted cookie value from the request.
 func (s ConfidentialCookieSigner) ReadEncrypted(r CookieRequest, name string) (string, error) {
 	// Read the encrypted value from the cookie as normal.
 	encryptedValue, err := ReadCookie(r, name)

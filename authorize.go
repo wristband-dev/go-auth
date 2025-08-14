@@ -26,6 +26,7 @@ type AuthorizeRequest struct {
 	Domains AppDomains
 }
 
+// AuthorizeRequestOption is an interface for options that can be applied to an AuthorizeRequest.
 type AuthorizeRequestOption interface {
 	apply(*AuthorizeRequest)
 }
@@ -74,12 +75,14 @@ func (req AuthorizeRequest) AuthorizeURL(queryValues QueryValueResolver) string 
 	return endpoint + "?" + params.Encode()
 }
 
+// WithScopes sets the scopes for an AuthorizeRequest.
 func WithScopes(scopes ...string) AuthorizeRequestOption {
 	return authReqOptionFn(func(r *AuthorizeRequest) {
 		r.Scopes = scopes
 	})
 }
 
+// WithAdditionalScopes appends scopes to the current scopes of the AuthorizeRequest.
 func WithAdditionalScopes(scopes ...string) AuthorizeRequestOption {
 	return authReqOptionFn(func(r *AuthorizeRequest) {
 		for _, scope := range scopes {
@@ -90,12 +93,14 @@ func WithAdditionalScopes(scopes ...string) AuthorizeRequestOption {
 	})
 }
 
+// WithNonce sets the nonce for an AuthorizeRequest.
 func WithNonce(nonce string) AuthorizeRequestOption {
 	return authReqOptionFn(func(r *AuthorizeRequest) {
 		r.Nonce = nonce
 	})
 }
 
+// WithCodeVerifier sets the code verifier for an AuthorizeRequest.
 func WithCodeVerifier(codeVerifier string) AuthorizeRequestOption {
 	return authReqOptionFn(func(r *AuthorizeRequest) {
 		r.CodeVerifier = codeVerifier

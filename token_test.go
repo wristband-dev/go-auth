@@ -366,7 +366,7 @@ func TestTokenRequestDoWithCustomClient(t *testing.T) {
 	client := NewConfidentialClient("test-client-id", "test-client-secret")
 	customHTTPClient := &http.Client{}
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		response := TokenResponse{
 			AccessToken: "test-access-token",
 			TokenType:   "Bearer",
@@ -417,7 +417,7 @@ func TestTokenRequestDoValidationError(t *testing.T) {
 func TestTokenRequestDoHTTPError(t *testing.T) {
 	client := NewConfidentialClient("test-client-id", "test-client-secret")
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("Invalid request"))
 	}))
@@ -441,7 +441,7 @@ func TestTokenRequestDoHTTPError(t *testing.T) {
 func TestTokenRequestDoInvalidJSON(t *testing.T) {
 	client := NewConfidentialClient("test-client-id", "test-client-secret")
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("invalid json"))

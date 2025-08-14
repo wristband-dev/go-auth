@@ -11,10 +11,12 @@ import (
 
 type wristbandAuthContextKey struct{}
 
+// WithSessionContext adds the session to the context.
 func WithSessionContext(ctx context.Context, session *Session) context.Context {
 	return context.WithValue(ctx, wristbandAuthContextKey{}, session)
 }
 
+// SessionFromContext retrieves the session from the context.
 func SessionFromContext(ctx context.Context) *Session {
 	session, ok := ctx.Value(wristbandAuthContextKey{}).(*Session)
 	if !ok {
@@ -71,6 +73,7 @@ func (app WristbandApp) RefreshTokenIfExpired(next http.Handler) http.Handler {
 	})
 }
 
+// RequireAuthentication is a middleware that checks if the user is authenticated.
 func (app WristbandApp) RequireAuthentication(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(res http.ResponseWriter, req *http.Request) {
 		// Get session from session manager
@@ -89,13 +92,14 @@ func (app WristbandApp) RequireAuthentication(next http.Handler) http.Handler {
 			http.Redirect(res, req, redirectURL, http.StatusFound)
 			return
 		}
-		req.WithContext(WithSessionContext(req.Context(), session))
+		req = req.WithContext(WithSessionContext(req.Context(), session))
 
 		// User is authenticated, continue to next handler
 		next.ServeHTTP(res, req)
 	})
 }
 
+// CacheControlMiddleware sets headers to prevent caching of responses.
 func CacheControlMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Avoid caching.

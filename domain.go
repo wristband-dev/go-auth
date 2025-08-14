@@ -70,6 +70,7 @@ func (domains AppDomains) RequestTenantDomains(queryValues QueryValueResolver) *
 	}
 }
 
+// BasePath returns the base API path for the tenant domains.
 func (d *TenantDomains) BasePath(wristbandDomain string) string {
 	if d == nil {
 		return ""

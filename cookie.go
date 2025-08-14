@@ -49,11 +49,11 @@ func GetLoginStateCookie(cookieEncryption CookieEncryption, q QueryValueResolver
 	//	fmt.Printf("\n%s\n", q.(url.Values).Encode()) // Ensure q is url.Values for Has and Get methods
 
 	stateKey := q.Get("state")
-	stateJson, err := cookieEncryption.ReadEncrypted(req, loginStateCookieName(stateKey))
+	stateJSON, err := cookieEncryption.ReadEncrypted(req, loginStateCookieName(stateKey))
 	if err != nil {
 		return s, err
 	}
-	if err := json.Unmarshal([]byte(stateJson), &s); err != nil {
+	if err := json.Unmarshal([]byte(stateJSON), &s); err != nil {
 		return s, err
 	}
 	s.StateCookieKey = strings.TrimPrefix(s.StateCookieKey, LoginStateCookiePrefix)

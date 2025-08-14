@@ -19,7 +19,7 @@ type (
 		ExpiresIn      time.Duration    `json:"expiresIn"`
 		UserInfo       UserInfoResponse `json:"user_info"`
 		ReturnURL      string           `json:"-"`
-		UserId         string           `json:"userId"`
+		UserID         string           `json:"userID"`
 		Name           string           `json:"name"`
 		TenantID       string           `json:"tenantId"`
 		IDPName        string           `json:"idpName"`
@@ -38,6 +38,7 @@ type (
 	}
 )
 
+// AppInput is the input structure for configuring the WristbandApp.
 type AppInput struct {
 	LoginPath                string
 	CallbackURL              string
@@ -79,6 +80,7 @@ func (f appOptionFunc) apply(c *WristbandApp) {
 	f(c)
 }
 
+// WristbandApp extends the WristbandAuth with additional standard library http.Handler functionality.
 type WristbandApp struct {
 	WristbandAuth
 	LoginPath                string
@@ -88,6 +90,7 @@ type WristbandApp struct {
 	sessionMetadataExtractor func(Session) any
 }
 
+// LoginEndpoint returns the full URL for the login endpoint.
 func (app WristbandApp) LoginEndpoint() string {
 	return app.Domains.WristbandDomain + app.LoginPath
 }
@@ -190,8 +193,9 @@ func (app WristbandApp) LogoutHandler() http.HandlerFunc {
 	}
 }
 
+// SessionResponse is the structure returned by the SessionHandler.
 type SessionResponse struct {
-	UserId   string `json:"userId"`
+	UserID   string `json:"userId"`
 	TenantID string `json:"tenantId"`
 	Metadata any    `json:"metadata"`
 }
@@ -206,7 +210,7 @@ func (app WristbandApp) SessionHandler() http.HandlerFunc {
 		}
 
 		resp := SessionResponse{
-			UserId:   session.UserId,
+			UserID:   session.UserID,
 			TenantID: session.TenantID,
 		}
 		if app.sessionMetadataExtractor != nil {

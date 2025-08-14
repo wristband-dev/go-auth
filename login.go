@@ -132,7 +132,7 @@ func (ctx CallbackContext) Session() *Session {
 		ExpiresIn:      expiresIn,
 		UserInfo:       ctx.UserInfo,
 		ReturnURL:      ctx.LoginState.ReturnURL,
-		UserId:         ctx.UserInfo.Sub,
+		UserID:         ctx.UserInfo.Sub,
 		Name:           ctx.UserInfo.Name,
 		TenantID:       ctx.UserInfo.TenantID,
 	}

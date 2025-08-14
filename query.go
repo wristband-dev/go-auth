@@ -25,10 +25,12 @@ func (q QuerierValueResolver) Get(key string) string {
 	return q.Querier.Query(key)
 }
 
+// Has checks if the key exists in the query values by checking if the value is not empty.
 func (q QuerierValueResolver) Has(key string) bool {
 	return q.Querier.Query(key) == ""
 }
 
+// CallbackInputParams holds the parameters received in a callback request from Wristband.
 type CallbackInputParams struct {
 	Code  string `json:"code"`
 	State string `json:"state"`

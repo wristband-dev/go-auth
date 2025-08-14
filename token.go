@@ -33,6 +33,7 @@ type (
 		ExpiresIn    int    `json:"expires_in"`
 	}
 
+	// TokenRequest represents a request to obtain an OAuth token.
 	TokenRequest struct {
 		// GrantType is required.
 		GrantType GrantType `json:"grant_type"`

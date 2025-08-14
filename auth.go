@@ -9,6 +9,7 @@ import (
 	"github.com/wristband-dev/go-auth/rand"
 )
 
+// WristbandAuthConfig holds the configuration for Wristband authentication that is required.
 type WristbandAuthConfig struct {
 	// Client is the confidential client used for authentication.
 	Client ConfidentialClient
@@ -19,6 +20,7 @@ type WristbandAuthConfig struct {
 	SecretKey []byte
 }
 
+// NewWristbandAuth returns a new WristbandAuth instance configured with the provided settings.
 func NewWristbandAuth(cfg WristbandAuthConfig, opts ...AuthOption) (WristbandAuth, error) {
 	if err := cfg.Domains.Validate(); err != nil {
 		return WristbandAuth{}, fmt.Errorf("invalid domains configuration: %w", err)
@@ -60,6 +62,7 @@ func NewWristbandAuth(cfg WristbandAuthConfig, opts ...AuthOption) (WristbandAut
 	return auth, nil
 }
 
+// WristbandAuth provides the configuration and methods for authenticating with Wristband.
 type WristbandAuth struct {
 	// Required configuration
 	Client ConfidentialClient
@@ -92,22 +95,12 @@ func (auth WristbandAuth) ResolveLogoutEndpoint(values QueryValueResolver) strin
 	return auth.Domains.TenantedHost(values) + auth.logoutEndpoint
 }
 
-func (auth WristbandAuth) LogoutEndpoint(req *http.Request) string {
-	return auth.Domains.RequestTenantedHost(req) + auth.logoutEndpoint
-}
-
-func (auth WristbandAuth) AuthorizeEndpoint(req *http.Request) string {
-	return auth.Domains.RequestTenantedHost(req) + auth.authorizeEndpoint
-}
-
-func (auth WristbandAuth) ResolveAuthorizeEndpoint(values QueryValueResolver) string {
-	return auth.Domains.TenantedHost(values) + auth.authorizeEndpoint
-}
-
+// UserInfoEndpoint returns the user info endpoint URL for fetching user details.
 func (auth WristbandAuth) UserInfoEndpoint() string {
 	return auth.endpointRoot + auth.userInfoEndpoint
 }
 
+// CodeTokenRequest creates a TokenRequest for exchanging an authorization code for an access token.
 func (auth WristbandAuth) CodeTokenRequest(code, codeVerifier, redirectURI string) TokenRequest {
 	return TokenRequest{
 		Client:       auth.Client,
@@ -120,6 +113,7 @@ func (auth WristbandAuth) CodeTokenRequest(code, codeVerifier, redirectURI strin
 	}
 }
 
+// TokenRequestConf returns the configuration for building token requests.
 func (auth WristbandAuth) TokenRequestConf() TokenRequestConfig {
 	return TokenRequestConfig{
 		Client:   auth.Client,
@@ -127,6 +121,7 @@ func (auth WristbandAuth) TokenRequestConf() TokenRequestConfig {
 	}
 }
 
+// RevokeEndpoint returns the endpoint URL for revoking tokens.
 func (auth WristbandAuth) RevokeEndpoint() string {
 	return auth.endpointRoot + auth.revokeEndpoint
 }
