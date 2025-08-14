@@ -20,6 +20,7 @@ var (
 	ErrInvalidValue = errors.New("invalid cookie value")
 )
 
+// RequestContext is an interface that provides methods for reading and writing cookies in a request.
 type RequestContext interface {
 	ReadCookie(name string) (string, error)
 	WriteCookie(key, value string)
@@ -59,10 +60,8 @@ type ConfidentialCookieSigner struct {
 	aesGCM    cipher.AEAD
 }
 
+// WriteCookie writes a cookie to the HTTP response writer.
 func WriteCookie(w http.ResponseWriter, cookie http.Cookie) error {
-	// Encode the cookie value using base64.
-	// cookie.Value = base64.URLEncoding.EncodeToString([]byte(cookie.Value))
-
 	// Check the total length of the cookie contents. Return the ErrValueTooLong
 	// error if it's more than 4096 bytes.
 	if len(cookie.String()) > 4096 {
@@ -114,6 +113,7 @@ func (ctx RequestHandlerContext) WriteCookie(key, value string) {
 	})
 }
 
+// ReadCookie reads a cookie from the request and decodes its value from base64.
 func ReadCookie(r CookieRequest, name string) (string, error) {
 	// Read the cookie as normal.
 	cookie, err := r.Cookie(name)
@@ -149,6 +149,7 @@ func WriteSigned(w http.ResponseWriter, cookie http.Cookie, secretKey []byte) er
 	return WriteCookie(w, cookie)
 }
 
+// ReadSigned reads a signed cookie value from the request.
 func ReadSigned(r CookieRequest, name string, secretKey []byte) (string, error) {
 	// Read in the signed value from the cookie. This should be in the format
 	// "{signature}{original value}".

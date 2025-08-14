@@ -36,14 +36,6 @@ type (
 		TenantCustomDomain string `json:"tenant_custom_domain"`
 		TenantDomain       string `json:"tenant_domain"`
 	}
-
-	// QueryValueResolver is an interface for resolving query values for an http request.
-	QueryValueResolver interface {
-		// Get retrieves the value for the given key.
-		Get(key string) string
-		// Has checks if the key exists in the query values.
-		Has(key string) bool
-	}
 )
 
 // Validate returns an error if the AppDomains configuration is invalid.

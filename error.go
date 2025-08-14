@@ -4,12 +4,14 @@ import (
 	"fmt"
 )
 
-type InvalidParameter string
+// InvalidParameterError represents an error for an invalid query parameter.
+type InvalidParameterError string
 
-func (e InvalidParameter) Error() string {
+func (e InvalidParameterError) Error() string {
 	return "query parameter " + string(e) + " is invalid"
 }
 
+// WristbandError represents an error returned by the Wristband API.
 type WristbandError struct {
 	Message string
 	Code    string
@@ -25,6 +27,7 @@ func InvalidCallbackQueryParameterError(parameter string) *InvalidCallbackError 
 	}
 }
 
+// InvalidCallbackError represents an error for an invalid callback request from Wristband.
 type InvalidCallbackError struct {
 	Message string
 }

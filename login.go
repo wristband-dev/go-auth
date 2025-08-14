@@ -91,17 +91,14 @@ func (auth WristbandAuth) HandleCallback(ctx HTTPContext, callbackURL string) (*
 	}
 	inputs := getCallbackInputs(queryValues)
 	if inputs.Code == "" {
-		return nil, InvalidParameter("code")
+		return nil, InvalidParameterError("code")
 	}
 	loginState, err := GetLoginStateCookie(auth.cookieEncryption, queryValues, ctx.CookieRequest())
 	if err != nil {
 		return nil, err
 	}
 
-	tokenReq := NewTokenRequest(
-		auth.TokenRequestConf(),
-		WithAuthCode(inputs.Code, loginState.CodeVerifier, callbackURL),
-	)
+	tokenReq := auth.CodeTokenRequest(inputs.Code, loginState.CodeVerifier, callbackURL)
 
 	// Exchange code for tokens
 	tokenResponse, err := tokenReq.Do(auth.httpClient)
@@ -125,12 +122,14 @@ func (auth WristbandAuth) HandleCallback(ctx HTTPContext, callbackURL string) (*
 
 // Session returns a *Session object from the callback context.
 func (ctx CallbackContext) Session() *Session {
-	expiresAt := time.Now().Add(time.Second * time.Duration(ctx.TokenResponse.ExpiresIn))
+	expiresIn := time.Second * time.Duration(ctx.TokenResponse.ExpiresIn)
+	expiresAt := time.Now().Add(expiresIn)
 	return &Session{
 		AccessToken:    ctx.TokenResponse.AccessToken,
 		RefreshToken:   ctx.TokenResponse.RefreshToken,
 		IDToken:        ctx.TokenResponse.IDToken,
 		AccessTokenExp: expiresAt,
+		ExpiresIn:      expiresIn,
 		UserInfo:       ctx.UserInfo,
 		ReturnURL:      ctx.LoginState.ReturnURL,
 		UserId:         ctx.UserInfo.Sub,

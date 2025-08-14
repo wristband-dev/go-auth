@@ -1,6 +1,14 @@
 package goauth
 
 type (
+	// QueryValueResolver is an interface for resolving query values for an http request.
+	QueryValueResolver interface {
+		// Get retrieves the value for the given key.
+		Get(key string) string
+		// Has checks if the key exists in the query values.
+		Has(key string) bool
+	}
+
 	// QuerierValueResolver is an implementation of QueryValueResolver that by wrapping a Querier.
 	QuerierValueResolver struct {
 		Querier ValueQuerier

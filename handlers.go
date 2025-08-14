@@ -11,10 +11,12 @@ import (
 type (
 	// Session represents the user session after successful authentication
 	Session struct {
-		AccessToken    string           `json:"access_token"`
-		RefreshToken   string           `json:"refresh_token"`
-		IDToken        string           `json:"-"`
+		AccessToken  string `json:"access_token"`
+		RefreshToken string `json:"refresh_token"`
+		IDToken      string `json:"-"`
+		// AccessTokenExp is the expiration time of the access token.
 		AccessTokenExp time.Time        `json:"access_token_exp"`
+		ExpiresIn      time.Duration    `json:"expiresIn"`
 		UserInfo       UserInfoResponse `json:"user_info"`
 		ReturnURL      string           `json:"-"`
 		UserId         string           `json:"userId"`
@@ -194,6 +196,7 @@ type SessionResponse struct {
 	Metadata any    `json:"metadata"`
 }
 
+// SessionHandler is an http.HandlerFunc that retrieves the current user session.
 func (app WristbandApp) SessionHandler() http.HandlerFunc {
 	return func(res http.ResponseWriter, req *http.Request) {
 		session, err := app.SessionManager.GetSession(req.Context(), req)

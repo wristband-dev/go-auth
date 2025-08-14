@@ -8,15 +8,22 @@ import (
 	"github.com/wristband-dev/go-auth/rand"
 )
 
+// AuthorizeRequest represents the parameters needed to build an authorization request.
 type AuthorizeRequest struct {
-	State        string
-	Nonce        string
+	// State is a unique string to maintain state between the request and callback.
+	State string
+	// Nonce is a unique string used to mitigate replay attacks in OpenID Connect.
+	Nonce string
+	// CodeVerifier is used for PKCE (Proof Key for Code Exchange) to enhance security.
 	CodeVerifier string
-	RedirectURI  string
-	Scopes       []string
-	LoginHint    string
-	Client       ConfidentialClient
-	Domains      AppDomains
+	// RedirectURI is the URL to which the user will be redirected after authorization.
+	RedirectURI string
+	// Scopes are the requested scopes for the authorization.
+	Scopes []string
+	// Client contains the client credentials for the OAuth application.
+	Client ConfidentialClient
+	// Domains contains the application domain configuration.
+	Domains AppDomains
 }
 
 type AuthorizeRequestOption interface {
