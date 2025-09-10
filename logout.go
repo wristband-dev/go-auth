@@ -6,8 +6,8 @@ import (
 )
 
 // LogoutURL builds the logout URL for redirecting to Wristband
-func (auth WristbandAuth) LogoutURL(queryValues QueryValueResolver) string {
-	baseURL := auth.Domains.TenantedHost(queryValues)
+func (auth WristbandAuth) LogoutURL(req HTTPRequest) string {
+	baseURL := auth.Domains.TenantedHost(req)
 	if baseURL == "" {
 		if auth.logoutRedirectURI != "" {
 			return auth.logoutRedirectURI
@@ -19,7 +19,10 @@ func (auth WristbandAuth) LogoutURL(queryValues QueryValueResolver) string {
 	params.Set("client_id", auth.Client.ClientID)
 
 	if auth.logoutRedirectURI != "" {
-		params.Set("post_logout_redirect_uri", auth.logoutRedirectURI)
+		params.Set("redirect_url", auth.logoutRedirectURI)
+	}
+	if auth.logoutStateParameter != "" {
+		params.Set("state", auth.logoutStateParameter)
 	}
 
 	return baseURL + DefaultLogoutEndpoint + "?" + params.Encode()

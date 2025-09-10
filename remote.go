@@ -17,6 +17,7 @@ type UserInfoResponse struct {
 	IDPName       string   `json:"idp_name"`
 	Roles         []string `json:"roles"`
 	// Add additional fields as needed
+	CustomClaims map[string]any `json:"custom_claims"`
 }
 
 // getUserInfo fetches user information using the access token

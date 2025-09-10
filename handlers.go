@@ -14,15 +14,15 @@ type (
 		AccessToken  string `json:"access_token"`
 		RefreshToken string `json:"refresh_token"`
 		IDToken      string `json:"-"`
-		// AccessTokenExp is the expiration time of the access token.
-		AccessTokenExp time.Time        `json:"access_token_exp"`
-		ExpiresIn      time.Duration    `json:"expiresIn"`
-		UserInfo       UserInfoResponse `json:"user_info"`
-		ReturnURL      string           `json:"-"`
-		UserID         string           `json:"userID"`
-		Name           string           `json:"name"`
-		TenantID       string           `json:"tenantId"`
-		IDPName        string           `json:"idpName"`
+		// ExpiresAt is the expiration time of the access token.
+		ExpiresAt time.Time        `json:"expires_at"`
+		ExpiresIn time.Duration    `json:"expiresIn"`
+		UserInfo  UserInfoResponse `json:"user_info"`
+		ReturnURL string           `json:"-"`
+		UserID    string           `json:"userID"`
+		Name      string           `json:"name"`
+		TenantID  string           `json:"tenantId"`
+		IDPName   string           `json:"idpName"`
 	}
 
 	// SessionManager defines the interface for session management
@@ -113,15 +113,20 @@ func (app WristbandApp) LoginHandler(opts ...func(*LoginOptions)) http.HandlerFu
 	}
 
 	return func(res http.ResponseWriter, req *http.Request) {
+		httpCtx := app.HTTPContext(res, req)
 		res.Header().Set("Cache-Control", "no-cache, no-store")
 		res.Header().Set("Pragma", "no-cache")
 
-		if domains := app.Domains.RequestTenantDomains(req.URL.Query()); domains == nil || domains.TenantDomain == "" {
-			// If tenant domain is not provided or defaulted, redirect to application login endpoint
-			http.Redirect(res, req, fmt.Sprintf(`https://%s/login`, app.Domains.WristbandDomain), http.StatusFound)
+		if domains := app.Domains.RequestTenantDomains(httpCtx); domains == nil || domains.TenantDomain == "" {
+			if app.Domains.CustomApplicationLoginPageURL != "" {
+				http.Redirect(res, req, fmt.Sprintf("%s?client_id=%s", app.Domains.CustomApplicationLoginPageURL, app.Client.ClientID), http.StatusFound)
+				return
+			}
+			// If tenant domain is not resolved or defaulted, redirect to application login endpoint
+			http.Redirect(res, req, fmt.Sprintf(`https://%s/login?client_id=%s`, app.Domains.WristbandDomain, app.Client.ClientID), http.StatusFound)
+			return
 		}
 
-		httpCtx := app.HTTPContext(res, req)
 		// Build authorization URL
 		authURL, err := app.HandleLogin(httpCtx, app.CallbackURL, options)
 		if err != nil {
@@ -168,7 +173,8 @@ func (app WristbandApp) CallbackHandler() http.HandlerFunc {
 // LogoutHandler creates a middleware for logging out users
 func (app WristbandApp) LogoutHandler() http.HandlerFunc {
 	return func(res http.ResponseWriter, req *http.Request) {
-		url := app.LogoutURL(req.URL.Query())
+		ctx := app.HTTPContext(res, req)
+		url := app.LogoutURL(ctx)
 		// Get session from session manager
 		session, err := app.SessionManager.GetSession(req.Context(), req)
 		if err != nil {

@@ -26,6 +26,8 @@ type (
 		// MaxAge<0 means delete cookie immediately.
 		// MaxAge>0 means Max-Age attribute present and given in seconds.
 		MaxAge int
+		// DangerouslyDisableSecureCookies creates cookies without the Secure flag. Not recommended for production.
+		DangerouslyDisableSecureCookies bool
 	}
 )
 
@@ -41,7 +43,8 @@ func loginStateCookieName(stateStr string) string {
 }
 
 // GetLoginStateCookie retrieves the login state from a cookie in the request and decrypts it using the CookieEncryption provided.
-func GetLoginStateCookie(cookieEncryption CookieEncryption, q QueryValueResolver, req cookies.CookieRequest) (LoginState, error) {
+func GetLoginStateCookie(cookieEncryption CookieEncryption, reqCtx HTTPContext) (LoginState, error) {
+	q := reqCtx.Query()
 	var s LoginState
 	if q == nil || !q.Has("state") {
 		return s, InvalidCallbackQueryParameterError("state")
@@ -49,7 +52,7 @@ func GetLoginStateCookie(cookieEncryption CookieEncryption, q QueryValueResolver
 	//	fmt.Printf("\n%s\n", q.(url.Values).Encode()) // Ensure q is url.Values for Has and Get methods
 
 	stateKey := q.Get("state")
-	stateJSON, err := cookieEncryption.ReadEncrypted(req, loginStateCookieName(stateKey))
+	stateJSON, err := cookieEncryption.ReadEncrypted(reqCtx.CookieRequest(), loginStateCookieName(stateKey))
 	if err != nil {
 		return s, err
 	}

@@ -32,6 +32,14 @@ linters:
         - -SA1019 # omit Deprecated check
         - -QF1001
         - -ST1003
+  exclusions:
+    rules:
+      # Exclude some linters from running on tests files.
+      - path: _test\.go
+        linters:
+          - intrange
+          - revive
+          - unused
 formatters:
   enable:
     - gci

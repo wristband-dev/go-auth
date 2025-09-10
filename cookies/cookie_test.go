@@ -16,7 +16,7 @@ import (
 func TestNewConfidentialSigner(t *testing.T) {
 	t.Run("with provided secret key", func(t *testing.T) {
 		secretKey := []byte("test-secret-key-32-bytes-long!!")
-		signer := NewConfidentialSigner(secretKey)
+		signer := NewCookieEncryptor(secretKey)
 
 		if string(signer.SecretKey) != string(secretKey) {
 			t.Errorf("Expected SecretKey to match provided key")
@@ -24,7 +24,7 @@ func TestNewConfidentialSigner(t *testing.T) {
 	})
 
 	t.Run("with nil secret key", func(t *testing.T) {
-		signer := NewConfidentialSigner(nil)
+		signer := NewCookieEncryptor(nil)
 
 		if len(signer.SecretKey) != 32 {
 			t.Errorf("Expected SecretKey to be 32 bytes, got %d", len(signer.SecretKey))
@@ -237,7 +237,7 @@ func TestReadSigned(t *testing.T) {
 
 func TestWriteEncrypted(t *testing.T) {
 	secretKey := rand.GenerateRandomKey(32)
-	signer := NewConfidentialSigner(secretKey)
+	signer := NewCookieEncryptor(secretKey)
 
 	t.Run("successful write", func(t *testing.T) {
 		w := httptest.NewRecorder()
@@ -267,7 +267,7 @@ func TestWriteEncrypted(t *testing.T) {
 	})
 
 	t.Run("invalid secret key", func(t *testing.T) {
-		invalidSigner := NewConfidentialSigner([]byte("short"))
+		invalidSigner := NewCookieEncryptor([]byte("short"))
 		w := httptest.NewRecorder()
 		cookie := http.Cookie{
 			Name:  "test",
@@ -283,7 +283,7 @@ func TestWriteEncrypted(t *testing.T) {
 
 func TestReadEncrypted(t *testing.T) {
 	secretKey := rand.GenerateRandomKey(32)
-	signer := NewConfidentialSigner(secretKey)
+	signer := NewCookieEncryptor(secretKey)
 
 	t.Run("successful read", func(t *testing.T) {
 		// Use the EncryptCookieValue method which properly base64 encodes
@@ -349,7 +349,7 @@ func TestReadEncrypted(t *testing.T) {
 			Value: encryptedValue,
 		})
 
-		wrongSigner := NewConfidentialSigner(rand.GenerateRandomKey(32))
+		wrongSigner := NewCookieEncryptor(rand.GenerateRandomKey(32))
 		_, err = wrongSigner.ReadEncrypted(StandardRequest(req), "test")
 		if !errors.Is(err, ErrInvalidValue) {
 			t.Errorf("Expected ErrInvalidValue for wrong secret key, got %v", err)
@@ -394,7 +394,7 @@ func TestReadEncrypted(t *testing.T) {
 
 func TestCookieRoundTrip(t *testing.T) {
 	secretKey := rand.GenerateRandomKey(32)
-	signer := NewConfidentialSigner(secretKey)
+	signer := NewCookieEncryptor(secretKey)
 
 	// Only test basic cookie round trip since WriteCookie doesn't base64 encode
 	// and signed/encrypted cookies don't work properly with the current implementation

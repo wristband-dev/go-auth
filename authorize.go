@@ -52,8 +52,10 @@ func (auth WristbandAuth) NewAuthorizeRequest(callbackURL, state string, opts ..
 }
 
 // AuthorizeURL returns the authorization URL for redirecting to Wristband
-func (req AuthorizeRequest) AuthorizeURL(queryValues QueryValueResolver) string {
-	endpoint := req.Domains.TenantedHost(queryValues) + DefaultAuthorizeEndpoint
+func (req AuthorizeRequest) AuthorizeURL(httpCtx HTTPContext) string {
+	queryValues := httpCtx.Query()
+
+	endpoint := req.Domains.TenantedHost(httpCtx) + DefaultAuthorizeEndpoint
 	params := url.Values{}
 	params.Set("client_id", req.Client.ClientID)
 	params.Set("redirect_uri", req.RedirectURI)

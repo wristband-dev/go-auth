@@ -28,15 +28,15 @@ type RequestContext interface {
 	WriteCookie(key, value string)
 }
 
-// NewConfidentialSigner creates a new ConfidentialCookieSigner with the provided secret key.
-func NewConfidentialSigner(secretKey []byte) ConfidentialCookieSigner {
+// NewCookieEncryptor creates a new CookieEncryptor with the provided secret key.
+func NewCookieEncryptor(secretKey []byte) CookieEncryptor {
 	if secretKey == nil {
 		secretKey = rand.GenerateRandomKey(32)
 	}
 	// Create a new AES cipher block from the secret key.
 	block, err := aes.NewCipher(secretKey)
 	if err != nil {
-		return ConfidentialCookieSigner{
+		return CookieEncryptor{
 			SecretKey: secretKey,
 		}
 	}
@@ -44,19 +44,19 @@ func NewConfidentialSigner(secretKey []byte) ConfidentialCookieSigner {
 	// Wrap the cipher block in Galois Counter Mode.
 	aesGCM, err := cipher.NewGCM(block)
 	if err != nil {
-		return ConfidentialCookieSigner{
+		return CookieEncryptor{
 			SecretKey: secretKey,
 		}
 	}
-	return ConfidentialCookieSigner{
+	return CookieEncryptor{
 		SecretKey: secretKey,
 		block:     block,
 		aesGCM:    aesGCM,
 	}
 }
 
-// ConfidentialCookieSigner is used to read and write encrypted cookie values.
-type ConfidentialCookieSigner struct {
+// CookieEncryptor is used to read and write encrypted cookie values.
+type CookieEncryptor struct {
 	// SecretKey is the key used for the encryption.
 	SecretKey []byte
 	block     cipher.Block
@@ -84,6 +84,8 @@ type RequestHandlerContext struct {
 	CookieMaxAge int
 	CookiePath   string // optional
 	CookieDomain string // optional
+	// DangerouslyDisableSecureCookies creates cookies without the Secure flag. Not recommended for production.
+	DangerouslyDisableSecureCookies bool
 }
 
 // ReadCookie reads a cookie from the request and decodes its value from base64.
@@ -112,7 +114,7 @@ func (ctx RequestHandlerContext) WriteCookie(key, value string) {
 		Name:     key,
 		Value:    value,
 		HttpOnly: true,
-		Secure:   true,
+		Secure:   !ctx.DangerouslyDisableSecureCookies,
 		Path:     ctx.CookiePath,
 		Domain:   ctx.CookieDomain,
 		MaxAge:   ctx.CookieMaxAge,
@@ -196,7 +198,7 @@ func ReadSigned(r CookieRequest, name string, secretKey []byte) (string, error) 
 }
 
 // EncryptCookieValue encrypts a cookie value using AES GCM encryption.
-func (s ConfidentialCookieSigner) EncryptCookieValue(name, value string) (string, error) {
+func (s CookieEncryptor) EncryptCookieValue(name, value string) (string, error) {
 	// Create a unique nonce containing 12 random bytes.
 	nonce := rand.GenerateRandomKey(s.aesGCM.NonceSize())
 
@@ -225,7 +227,7 @@ func (s ConfidentialCookieSigner) EncryptCookieValue(name, value string) (string
 }
 
 // WriteEncrypted writes an encrypted cookie to the HTTP response writer.
-func (s ConfidentialCookieSigner) WriteEncrypted(w http.ResponseWriter, cookie http.Cookie) error {
+func (s CookieEncryptor) WriteEncrypted(w http.ResponseWriter, cookie http.Cookie) error {
 	// Create a new AES cipher block from the secret key.
 	block, err := aes.NewCipher(s.SecretKey)
 	if err != nil {
@@ -262,7 +264,7 @@ func (s ConfidentialCookieSigner) WriteEncrypted(w http.ResponseWriter, cookie h
 }
 
 // ReadEncrypted reads an encrypted cookie value from the request.
-func (s ConfidentialCookieSigner) ReadEncrypted(r CookieRequest, name string) (string, error) {
+func (s CookieEncryptor) ReadEncrypted(r CookieRequest, name string) (string, error) {
 	// Read the encrypted value from the cookie as normal.
 	encryptedValue, err := ReadCookie(r, name)
 	if err != nil {

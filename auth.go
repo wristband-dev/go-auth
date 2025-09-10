@@ -25,6 +25,13 @@ func NewWristbandAuth(cfg WristbandAuthConfig, opts ...AuthOption) (WristbandAut
 	if err := cfg.Domains.Validate(); err != nil {
 		return WristbandAuth{}, fmt.Errorf("invalid domains configuration: %w", err)
 	}
+	if cfg.Domains.DefaultDomains != nil {
+		separator := "-"
+		if cfg.Domains.IsApplicationCustomDomainActive {
+			separator = "."
+		}
+		cfg.Domains.DefaultDomains.separator = separator
+	}
 
 	if len(cfg.SecretKey) != 0 && len(cfg.SecretKey) != 32 {
 		return WristbandAuth{}, errors.New("secret key is must be exactly 32 bytes")
@@ -54,7 +61,7 @@ func NewWristbandAuth(cfg WristbandAuthConfig, opts ...AuthOption) (WristbandAut
 		if len(key) == 0 {
 			key = rand.GenerateRandomKey(32)
 		}
-		auth.cookieEncryption = cookies.NewConfidentialSigner(key)
+		auth.cookieEncryption = cookies.NewCookieEncryptor(key)
 	}
 
 	auth.tokenURL = fmt.Sprintf("https://%s", auth.endpointRoot+auth.tokenEndpoint)
@@ -74,13 +81,14 @@ type WristbandAuth struct {
 	Scopes []string
 
 	// Endpoint customization (optional)
-	tokenEndpoint     string
-	authorizeEndpoint string
-	userInfoEndpoint  string
-	logoutEndpoint    string
-	revokeEndpoint    string
-	endpointRoot      string
-	logoutRedirectURI string // Optional redirect URI after logout if no redirect is resolved from the request.
+	tokenEndpoint        string
+	authorizeEndpoint    string
+	userInfoEndpoint     string
+	logoutEndpoint       string
+	revokeEndpoint       string
+	endpointRoot         string
+	logoutRedirectURI    string // Optional redirect URI after logout if no redirect is resolved from the request.
+	logoutStateParameter string
 
 	// Advanced settings
 	httpClient        *http.Client
@@ -91,8 +99,8 @@ type WristbandAuth struct {
 }
 
 // ResolveLogoutEndpoint returns the logout endpoint URL for a given set of query values.
-func (auth WristbandAuth) ResolveLogoutEndpoint(values QueryValueResolver) string {
-	return auth.Domains.TenantedHost(values) + auth.logoutEndpoint
+func (auth WristbandAuth) ResolveLogoutEndpoint(req HTTPRequest) string {
+	return auth.Domains.TenantedHost(req) + auth.logoutEndpoint
 }
 
 // UserInfoEndpoint returns the user info endpoint URL for fetching user details.
@@ -149,6 +157,13 @@ func WithLogoutRedirectURL(url string) AuthOption {
 func WithCookieEncryption(cookieEncryption CookieEncryption) AuthOption {
 	return authOptionFunc(func(c *WristbandAuth) {
 		c.cookieEncryption = cookieEncryption
+	})
+}
+
+// WithParseTenantFromRootDomain indicates that the tenant should be derived from the incoming request's host.
+func WithParseTenantFromRootDomain() AuthOption {
+	return authOptionFunc(func(c *WristbandAuth) {
+		c.Domains.ParseTenantFromRootDomain = true
 	})
 }
 
