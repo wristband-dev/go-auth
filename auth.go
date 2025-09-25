@@ -113,7 +113,7 @@ func (auth WristbandAuth) CodeTokenRequest(code, codeVerifier, redirectURI strin
 	return TokenRequest{
 		Client:       auth.Client,
 		Scopes:       auth.Scopes,
-		Endpoint:     auth.tokenEndpoint,
+		Endpoint:     auth.tokenURL,
 		GrantType:    GrantTypeCode,
 		Code:         code,
 		CodeVerifier: codeVerifier,
