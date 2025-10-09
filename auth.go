@@ -18,6 +18,9 @@ type WristbandAuthConfig struct {
 	// SecretKey is the key used for encrypting cookies.
 	// If empty, a random key will be generated. If set, it must be 32 bytes long.
 	SecretKey []byte
+	// AuthConfig provides the authentication configuration for the new config resolver pattern.
+	// This is an alternative to the individual fields above and provides more flexibility.
+	AuthConfig *AuthConfig
 }
 
 // NewWristbandAuth returns a new WristbandAuth instance configured with the provided settings.
@@ -37,6 +40,16 @@ func NewWristbandAuth(cfg WristbandAuthConfig, opts ...AuthOption) (WristbandAut
 		return WristbandAuth{}, errors.New("secret key is must be exactly 32 bytes")
 	}
 
+	// If AuthConfig is provided, create a ConfigResolver
+	var configResolver *ConfigResolver
+	if cfg.AuthConfig != nil {
+		var err error
+		configResolver, err = NewConfigResolver(cfg.AuthConfig)
+		if err != nil {
+			return WristbandAuth{}, fmt.Errorf("failed to create config resolver: %w", err)
+		}
+	}
+
 	auth := WristbandAuth{
 		Client:            cfg.Client,
 		Domains:           cfg.Domains,
@@ -50,6 +63,7 @@ func NewWristbandAuth(cfg WristbandAuthConfig, opts ...AuthOption) (WristbandAut
 		httpClient:        http.DefaultClient,
 		tokenExpiryBuffer: DefaultTokenExpiryBuffer,
 		logoutRedirectURI: "/",
+		configResolver:    configResolver,
 	}
 
 	for _, opt := range opts {
@@ -96,6 +110,9 @@ type WristbandAuth struct {
 
 	cookieEncryption CookieEncryption
 	tokenURL         string
+
+	// ConfigResolver provides dynamic configuration resolution
+	configResolver *ConfigResolver
 }
 
 // ResolveLogoutEndpoint returns the logout endpoint URL for a given set of query values.
@@ -132,6 +149,43 @@ func (auth WristbandAuth) TokenRequestConf() TokenRequestConfig {
 // RevokeEndpoint returns the endpoint URL for revoking tokens.
 func (auth WristbandAuth) RevokeEndpoint() string {
 	return auth.endpointRoot + auth.revokeEndpoint
+}
+
+// GetConfigResolver returns the ConfigResolver if available
+func (auth WristbandAuth) GetConfigResolver() *ConfigResolver {
+	return auth.configResolver
+}
+
+// GetClientID returns the client ID from the ConfigResolver if available, otherwise from the Client
+func (auth WristbandAuth) GetClientID() string {
+	if auth.configResolver != nil {
+		return auth.configResolver.GetClientID()
+	}
+	return auth.Client.ClientID
+}
+
+// GetClientSecret returns the client secret from the ConfigResolver if available, otherwise from the Client
+func (auth WristbandAuth) GetClientSecret() string {
+	if auth.configResolver != nil {
+		return auth.configResolver.GetClientSecret()
+	}
+	return auth.Client.ClientSecret
+}
+
+// GetScopes returns the scopes from the ConfigResolver if available, otherwise from the auth instance
+func (auth WristbandAuth) GetScopes() []string {
+	if auth.configResolver != nil {
+		return auth.configResolver.GetScopes()
+	}
+	return auth.Scopes
+}
+
+// GetTokenExpiryBuffer returns the token expiry buffer from the ConfigResolver if available, otherwise from the auth instance
+func (auth WristbandAuth) GetTokenExpiryBuffer() int {
+	if auth.configResolver != nil {
+		return auth.configResolver.GetTokenExpirationBuffer()
+	}
+	return auth.tokenExpiryBuffer
 }
 
 // AuthOption is an interface for options that can be applied to modify the WristbandAuth configuration.

@@ -9,7 +9,7 @@ import (
 )
 
 func TestNewTokenRequest(t *testing.T) {
-	client := NewConfidentialClient("test-client-id", "test-client-secret")
+	client := NewConfidentialClient("test-client-id", "test-client-secret", "test-wristband-application-vanity-domain")
 	config := TokenRequestConfig{
 		Client:   client,
 		Scopes:   []string{"read", "write"},
@@ -30,7 +30,7 @@ func TestNewTokenRequest(t *testing.T) {
 }
 
 func TestNewTokenRequestWithOptions(t *testing.T) {
-	client := NewConfidentialClient("test-client-id", "test-client-secret")
+	client := NewConfidentialClient("test-client-id", "test-client-secret", "test-wristband-application-vanity-domain")
 	config := TokenRequestConfig{
 		Client:   client,
 		Endpoint: "https://example.com/token",
@@ -49,7 +49,7 @@ func TestNewTokenRequestWithOptions(t *testing.T) {
 }
 
 func TestNewTokenRequestWithAuthCode(t *testing.T) {
-	client := NewConfidentialClient("test-client-id", "test-client-secret")
+	client := NewConfidentialClient("test-client-id", "test-client-secret", "test-wristband-application-vanity-domain")
 	config := TokenRequestConfig{
 		Client:   client,
 		Endpoint: "https://example.com/token",
@@ -74,7 +74,7 @@ func TestNewTokenRequestWithAuthCode(t *testing.T) {
 }
 
 func TestNewClientCredentialsTokenRequest(t *testing.T) {
-	client := NewConfidentialClient("test-client-id", "test-client-secret")
+	client := NewConfidentialClient("test-client-id", "test-client-secret", "test-wristband-application-vanity-domain")
 
 	req := NewClientCredentialsTokenRequest(client, "https://example.com/token")
 
@@ -90,7 +90,7 @@ func TestNewClientCredentialsTokenRequest(t *testing.T) {
 }
 
 func TestTokenRequestValidate(t *testing.T) {
-	client := NewConfidentialClient("test-client-id", "test-client-secret")
+	client := NewConfidentialClient("test-client-id", "test-client-secret", "test-wristband-application-vanity-domain")
 
 	testCases := []struct {
 		name        string
@@ -203,7 +203,7 @@ func TestTokenRequestValidate(t *testing.T) {
 }
 
 func TestTokenRequestDo(t *testing.T) {
-	client := NewConfidentialClient("test-client-id", "test-client-secret")
+	client := NewConfidentialClient("test-client-id", "test-client-secret", "test-wristband-application-vanity-domain")
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
@@ -282,7 +282,7 @@ func TestTokenRequestDo(t *testing.T) {
 }
 
 func TestTokenRequestDoRefreshToken(t *testing.T) {
-	client := NewConfidentialClient("test-client-id", "test-client-secret")
+	client := NewConfidentialClient("test-client-id", "test-client-secret", "test-wristband-application-vanity-domain")
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		r.ParseForm()
@@ -327,7 +327,7 @@ func TestTokenRequestDoRefreshToken(t *testing.T) {
 }
 
 func TestTokenRequestDoClientCredentials(t *testing.T) {
-	client := NewConfidentialClient("test-client-id", "test-client-secret")
+	client := NewConfidentialClient("test-client-id", "test-client-secret", "test-wristband-application-vanity-domain")
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		r.ParseForm()
@@ -363,7 +363,7 @@ func TestTokenRequestDoClientCredentials(t *testing.T) {
 }
 
 func TestTokenRequestDoWithCustomClient(t *testing.T) {
-	client := NewConfidentialClient("test-client-id", "test-client-secret")
+	client := NewConfidentialClient("test-client-id", "test-client-secret", "test-wristband-application-vanity-domain")
 	customHTTPClient := &http.Client{}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -396,7 +396,7 @@ func TestTokenRequestDoWithCustomClient(t *testing.T) {
 }
 
 func TestTokenRequestDoValidationError(t *testing.T) {
-	client := NewConfidentialClient("test-client-id", "test-client-secret")
+	client := NewConfidentialClient("test-client-id", "test-client-secret", "test-wristband-application-vanity-domain")
 
 	req := TokenRequest{
 		GrantType:    GrantTypeRefreshToken,
@@ -415,7 +415,7 @@ func TestTokenRequestDoValidationError(t *testing.T) {
 }
 
 func TestTokenRequestDoHTTPError(t *testing.T) {
-	client := NewConfidentialClient("test-client-id", "test-client-secret")
+	client := NewConfidentialClient("test-client-id", "test-client-secret", "test-wristband-application-vanity-domain")
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
@@ -439,7 +439,7 @@ func TestTokenRequestDoHTTPError(t *testing.T) {
 }
 
 func TestTokenRequestDoInvalidJSON(t *testing.T) {
-	client := NewConfidentialClient("test-client-id", "test-client-secret")
+	client := NewConfidentialClient("test-client-id", "test-client-secret", "test-wristband-application-vanity-domain")
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

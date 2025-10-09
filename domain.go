@@ -118,3 +118,102 @@ func (d *TenantDomains) BasePath(wristbandDomain string) string {
 	}
 	return fmt.Sprintf("https://%s%s%s/api/v1", d.TenantDomain, separator, wristbandDomain)
 }
+
+// AuthConfig represents the configuration for Wristband authentication.
+// This struct supports both manual configuration and auto-configuration via the Wristband SDK configuration endpoint.
+type AuthConfig struct {
+	// AutoConfigureEnabled tells the SDK to automatically set some configuration values by
+	// calling to Wristband's SDK Auto-Configuration Endpoint. Any manually provided configurations
+	// will take precedence over the configs returned from the endpoint. Auto-configure is enabled by default.
+	// When disabled, if manual configurations are not provided, then an error will be thrown.
+	AutoConfigureEnabled bool `json:"auto_configure_enabled"`
+
+	// ClientID is the client ID for the application
+	ClientID string `json:"client_id"`
+
+	// ClientSecret is the client secret for the application
+	ClientSecret string `json:"client_secret"`
+
+	// LoginStateSecret is a secret (32 or more characters in length) used for encryption and decryption
+	// of login state cookies. If not provided, it will default to using the client secret.
+	// For enhanced security, it is recommended to provide a value that is unique from the client secret.
+	LoginStateSecret string `json:"login_state_secret,omitempty"`
+
+	// LoginURL is the URL for initiating the login request. This field is auto-configurable.
+	// Required when auto-configure is disabled.
+	LoginURL string `json:"login_url,omitempty"`
+
+	// RedirectURI is the redirect URI for callback after authentication. This field is auto-configurable.
+	// Required when auto-configure is disabled.
+	RedirectURI string `json:"redirect_uri,omitempty"`
+
+	// WristbandApplicationVanityDomain is the vanity domain of the Wristband application
+	WristbandApplicationVanityDomain string `json:"wristband_application_vanity_domain"`
+
+	// CustomApplicationLoginPageURL is the custom application login (tenant discovery) page URL
+	// if you are self-hosting the application login/tenant discovery UI. This field is auto-configurable.
+	CustomApplicationLoginPageURL string `json:"custom_application_login_page_url,omitempty"`
+
+	// DangerouslyDisableSecureCookies if set to true, the "Secure" attribute will not be
+	// included in any cookie settings. This should only be done when testing in local development.
+	DangerouslyDisableSecureCookies bool `json:"dangerously_disable_secure_cookies"`
+
+	// IsApplicationCustomDomainActive indicates whether an application-level custom domain
+	// is active in your Wristband application. This field is auto-configurable.
+	IsApplicationCustomDomainActive *bool `json:"is_application_custom_domain_active,omitempty"`
+
+	// ParseTenantFromRootDomain is the root domain for your application from which to parse
+	// out the tenant domain name. Indicates whether tenant subdomains are used for authentication.
+	// This field is auto-configurable.
+	ParseTenantFromRootDomain string `json:"parse_tenant_from_root_domain,omitempty"`
+
+	// Scopes are the scopes required for authentication. Defaults to ["openid", "offline_access", "email"]
+	Scopes []string `json:"scopes,omitempty"`
+
+	// TokenExpirationBuffer is the buffer time (in seconds) to subtract from the access token's expiration time.
+	// This causes the token to be treated as expired before its actual expiration, helping to avoid token
+	// expiration during API calls. Defaults to 60 seconds.
+	TokenExpirationBuffer int `json:"token_expiration_buffer"`
+}
+
+func NewAutoConfigureAuthConfig(clientID, clientSecret, wristbandDomain string) *AuthConfig {
+	return &AuthConfig{
+		AutoConfigureEnabled:             true,
+		ClientID:                         clientID,
+		ClientSecret:                     clientSecret,
+		WristbandApplicationVanityDomain: wristbandDomain,
+	}
+}
+
+func (ac AuthConfig) Client() ConfidentialClient {
+	return ConfidentialClient{
+		ClientID:                         ac.ClientID,
+		httpClient:                       http.DefaultClient,
+		ClientSecret:                     ac.ClientSecret,
+		WristbandApplicationVanityDomain: ac.WristbandApplicationVanityDomain,
+	}
+}
+
+// DefaultScopes returns the default OAuth scopes
+var DefaultScopes = []string{"openid", "offline_access", "email"}
+
+// DefaultTokenExpirationBuffer returns the default token expiration buffer in seconds
+const DefaultTokenExpirationBuffer = 60
+
+// SdkConfiguration represents the SDK configuration returned from Wristband's SDK Auto-Configuration Endpoint
+type SdkConfiguration struct {
+	// LoginURL is the URL for initiating the login request
+	LoginURL string `json:"login_url"`
+
+	// RedirectURI is the redirect URI for callback after authentication
+	RedirectURI string `json:"redirect_uri"`
+
+	// IsApplicationCustomDomainActive indicates whether an application-level custom domain is active
+	IsApplicationCustomDomainActive bool `json:"is_application_custom_domain_active"`
+
+	// CustomApplicationLoginPageURL is the custom application login (tenant discovery) page URL
+	CustomApplicationLoginPageURL string `json:"custom_application_login_page_url,omitempty"`
+
+	// LoginURLTenantDomainSuffix is the tenant domain suffix for the login URL when using tenant subdomains
+	LoginURLTenantDomainSuffix string `json:"login_url_tenant_domain_suffix,omitempty"`
+}

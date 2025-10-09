@@ -54,6 +54,10 @@ func NewApp(auth WristbandAuth, input AppInput, opts ...AppOption) WristbandApp 
 		CallbackURL:              input.CallbackURL,
 		SessionManager:           input.SessionManager,
 		sessionMetadataExtractor: input.SessionMetadataExtractor,
+		cookieOpts: CookieOptions{
+			Path:   "/",
+			MaxAge: 3600,
+		},
 	}
 	for _, opt := range opts {
 		opt.apply(app)

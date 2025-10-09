@@ -10,7 +10,7 @@ func TestNewConfidentialClient(t *testing.T) {
 	clientID := "test-client-id"
 	clientSecret := "test-client-secret"
 
-	client := NewConfidentialClient(clientID, clientSecret)
+	client := NewConfidentialClient(clientID, clientSecret, "test-wristband-application-vanity-domain")
 
 	if client.ClientID != clientID {
 		t.Errorf("Expected ClientID to be '%s', got %s", clientID, client.ClientID)
@@ -24,6 +24,7 @@ func TestConfidentialClientSetRequestAuth(t *testing.T) {
 	client := &ConfidentialClient{
 		ClientID:     "test-client-id",
 		ClientSecret: "test-client-secret",
+		WristbandApplicationVanityDomain: "test-wristband-application-vanity-domain",
 	}
 
 	req := httptest.NewRequest("POST", "https://example.com/token", nil)
