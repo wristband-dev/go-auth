@@ -8,6 +8,8 @@ import (
 type CookieRequest interface {
 	// Cookie retrieves the value of a cookie by its name.
 	Cookie(name string) (string, error)
+	// Cookies retrieves all cookie names from the request.
+	Cookies() []string
 }
 
 // StdRequest wraps an *http.Request to provide a CookieRequest interface.
@@ -28,4 +30,14 @@ func (req *StdRequest) Cookie(name string) (string, error) {
 		return "", err
 	}
 	return cookie.Value, nil
+}
+
+// Cookies retrieves all cookie names from the request.
+func (req *StdRequest) Cookies() []string {
+	cookies := req.Request.Cookies()
+	names := make([]string, len(cookies))
+	for i, cookie := range cookies {
+		names[i] = cookie.Name
+	}
+	return names
 }

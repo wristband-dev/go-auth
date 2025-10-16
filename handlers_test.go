@@ -65,10 +65,12 @@ type mockHTTPContext struct {
 }
 
 func newMockHTTPContext() *mockHTTPContext {
+	mockCookieReq := newMockCookieRequest()
 	return &mockHTTPContext{
 		queryValues:    make(url.Values),
 		writtenCookies: make(map[string]string),
 		clearedCookies: make([]string, 0),
+		cookieRequest:  mockCookieReq,
 	}
 }
 
@@ -94,6 +96,31 @@ func (m *mockHTTPContext) WriteCookie(name, value string) error {
 
 func (m *mockHTTPContext) ClearCookie(name string) {
 	m.clearedCookies = append(m.clearedCookies, name)
+}
+
+type mockCookieRequest struct {
+	cookies map[string]string
+}
+
+func newMockCookieRequest() *mockCookieRequest {
+	return &mockCookieRequest{
+		cookies: make(map[string]string),
+	}
+}
+
+func (m *mockCookieRequest) Cookie(name string) (string, error) {
+	if val, exists := m.cookies[name]; exists {
+		return val, nil
+	}
+	return "", fmt.Errorf("cookie not found: %s", name)
+}
+
+func (m *mockCookieRequest) Cookies() []string {
+	names := make([]string, 0, len(m.cookies))
+	for name := range m.cookies {
+		names = append(names, name)
+	}
+	return names
 }
 
 type mockCookieEncryption struct {
@@ -752,5 +779,118 @@ func BenchmarkSessionJSONMarshaling(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
+	}
+}
+
+// Test cookie cleanup functionality
+func TestWristbandAuth_CleanupOldLoginCookies(t *testing.T) {
+	auth := WristbandAuth{
+		cookieEncryption: newMockCookieEncryption(),
+	}
+
+	mockCtx := newMockHTTPContext()
+	mockCookieReq := mockCtx.cookieRequest.(*mockCookieRequest)
+
+	// Add 5 login cookies with different timestamps
+	now := time.Now().UnixMilli()
+	cookieNames := []string{
+		fmt.Sprintf("wb-login#state1#%d", now-4000), // oldest
+		fmt.Sprintf("wb-login#state2#%d", now-3000),
+		fmt.Sprintf("wb-login#state3#%d", now-2000),
+		fmt.Sprintf("wb-login#state4#%d", now-1000),
+		fmt.Sprintf("wb-login#state5#%d", now), // newest
+	}
+
+	for _, name := range cookieNames {
+		mockCookieReq.cookies[name] = "dummy-value"
+	}
+
+	// Add a non-login cookie to verify it's not cleared
+	mockCookieReq.cookies["other-cookie"] = "other-value"
+
+	// Call cleanup
+	auth.cleanupOldLoginCookies(mockCtx)
+
+	// Should keep only the 2 most recent cookies (state4 and state5)
+	// and clear the 3 oldest (state1, state2, state3)
+	if len(mockCtx.clearedCookies) != 3 {
+		t.Errorf("Expected 3 cookies to be cleared, got %d", len(mockCtx.clearedCookies))
+	}
+
+	// Verify the correct cookies were cleared (the 3 oldest)
+	clearedSet := make(map[string]bool)
+	for _, name := range mockCtx.clearedCookies {
+		clearedSet[name] = true
+	}
+
+	if !clearedSet[cookieNames[0]] || !clearedSet[cookieNames[1]] || !clearedSet[cookieNames[2]] {
+		t.Error("The 3 oldest cookies should have been cleared")
+	}
+
+	if clearedSet[cookieNames[3]] || clearedSet[cookieNames[4]] {
+		t.Error("The 2 newest cookies should not have been cleared")
+	}
+
+	if clearedSet["other-cookie"] {
+		t.Error("Non-login cookies should not be cleared")
+	}
+}
+
+// Test cookie name format with timestamp
+func TestLoginStateCookieName_WithTimestamp(t *testing.T) {
+	stateStr := "test-state-123"
+	timestamp := int64(1634567890123)
+
+	cookieName := loginStateCookieName(stateStr, timestamp)
+
+	expectedName := "wb-login#test-state-123#1634567890123"
+	if cookieName != expectedName {
+		t.Errorf("Expected cookie name %s, got %s", expectedName, cookieName)
+	}
+
+	// Test parsing
+	parsedState, parsedTimestamp, err := parseLoginStateCookieName(cookieName)
+	if err != nil {
+		t.Fatalf("Failed to parse cookie name: %v", err)
+	}
+
+	if parsedState != stateStr {
+		t.Errorf("Expected parsed state %s, got %s", stateStr, parsedState)
+	}
+
+	if parsedTimestamp != timestamp {
+		t.Errorf("Expected parsed timestamp %d, got %d", timestamp, parsedTimestamp)
+	}
+}
+
+// Test LoginState with CreatedAt field
+func TestLoginState_CreatedAt(t *testing.T) {
+	queryValues := url.Values{}
+	queryValues.Set("return_url", "http://example.com/return")
+
+	options := &LoginOptions{
+		CustomState: map[string]any{"key": "value"},
+	}
+
+	state := CreateLoginState(queryValues, options)
+
+	if state.CreatedAt == 0 {
+		t.Error("CreatedAt should be set to current timestamp")
+	}
+
+	// Verify the cookie name includes the timestamp
+	cookieName := state.CookieName()
+	if !strings.Contains(cookieName, "wb-login#") {
+		t.Error("Cookie name should start with the login state prefix")
+	}
+
+	// Parse and verify
+	_, parsedTimestamp, err := parseLoginStateCookieName(cookieName)
+	if err != nil {
+		t.Fatalf("Failed to parse cookie name: %v", err)
+	}
+
+	if parsedTimestamp != state.CreatedAt {
+		t.Errorf("Expected timestamp %d in cookie name, got %d", state.CreatedAt, parsedTimestamp)
 	}
 }

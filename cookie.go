@@ -2,6 +2,8 @@ package goauth
 
 import (
 	"encoding/json"
+	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/wristband-dev/go-auth/cookies"
@@ -38,8 +40,32 @@ const (
 
 // Cookie handling functions
 
-func loginStateCookieName(stateStr string) string {
-	return LoginStateCookiePrefix + stateStr
+func loginStateCookieName(stateStr string, timestamp int64) string {
+	return fmt.Sprintf("%s%s#%d", LoginStateCookiePrefix, stateStr, timestamp)
+}
+
+// parseLoginStateCookieName extracts the state value and timestamp from a login state cookie name.
+func parseLoginStateCookieName(cookieName string) (state string, timestamp int64, err error) {
+	// Remove the prefix
+	if !strings.HasPrefix(cookieName, LoginStateCookiePrefix) {
+		return "", 0, fmt.Errorf("invalid login state cookie name: missing prefix")
+	}
+
+	remainder := strings.TrimPrefix(cookieName, LoginStateCookiePrefix)
+
+	// Split by '#' to get state and timestamp
+	parts := strings.Split(remainder, "#")
+	if len(parts) != 2 {
+		return "", 0, fmt.Errorf("invalid login state cookie name format")
+	}
+
+	state = parts[0]
+	timestamp, err = strconv.ParseInt(parts[1], 10, 64)
+	if err != nil {
+		return "", 0, fmt.Errorf("invalid timestamp in cookie name: %w", err)
+	}
+
+	return state, timestamp, nil
 }
 
 // GetLoginStateCookie retrieves the login state from a cookie in the request and decrypts it using the CookieEncryption provided.
@@ -49,10 +75,32 @@ func GetLoginStateCookie(cookieEncryption CookieEncryption, reqCtx HTTPContext) 
 	if q == nil || !q.Has("state") {
 		return s, InvalidCallbackQueryParameterError("state")
 	}
-	//	fmt.Printf("\n%s\n", q.(url.Values).Encode()) // Ensure q is url.Values for Has and Get methods
 
 	stateKey := q.Get("state")
-	stateJSON, err := cookieEncryption.ReadEncrypted(reqCtx.CookieRequest(), loginStateCookieName(stateKey))
+
+	// Find the cookie that matches the state key from query parameter
+	allCookieNames := reqCtx.CookieRequest().Cookies()
+	var matchingCookieName string
+
+	for _, cookieName := range allCookieNames {
+		if !strings.HasPrefix(cookieName, LoginStateCookiePrefix) {
+			continue
+		}
+		state, _, err := parseLoginStateCookieName(cookieName)
+		if err != nil {
+			continue
+		}
+		if state == stateKey {
+			matchingCookieName = cookieName
+			break
+		}
+	}
+
+	if matchingCookieName == "" {
+		return s, fmt.Errorf("login state cookie not found for state: %s", stateKey)
+	}
+
+	stateJSON, err := cookieEncryption.ReadEncrypted(reqCtx.CookieRequest(), matchingCookieName)
 	if err != nil {
 		return s, err
 	}

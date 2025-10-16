@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -164,6 +165,9 @@ func (app WristbandApp) CallbackHandler() http.HandlerFunc {
 		// Clear login state cookie
 		ctx.ClearCookie(callbackContext.LoginState.CookieName())
 
+		// Clear any other remaining old login cookies
+		app.clearAllLoginCookies(ctx)
+
 		// Redirect to return URL or default location
 		redirectURL := "/"
 		if url := callbackContext.LoginState.ReturnURL; url != "" {
@@ -171,6 +175,16 @@ func (app WristbandApp) CallbackHandler() http.HandlerFunc {
 		}
 
 		http.Redirect(res, req, redirectURL, http.StatusFound)
+	}
+}
+
+// clearAllLoginCookies removes all login state cookies from the request.
+func (app WristbandApp) clearAllLoginCookies(ctx HTTPContext) {
+	allCookieNames := ctx.CookieRequest().Cookies()
+	for _, cookieName := range allCookieNames {
+		if strings.HasPrefix(cookieName, LoginStateCookiePrefix) {
+			ctx.ClearCookie(cookieName)
+		}
 	}
 }
 
