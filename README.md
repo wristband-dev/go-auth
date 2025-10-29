@@ -66,6 +66,29 @@ You can learn more about how authentication works in Wristband in our documentat
 
 
 ### 1) Initialize the SDK
+
+Create a Wristband authentication client using `AuthConfig`:
+
+```go
+// Create the authentication configuration
+authConfig := &goauth.AuthConfig{
+    ClientID:                         "your-client-id",
+    ClientSecret:                     "your-client-secret",
+    WristbandApplicationVanityDomain: "your-app.wristband.dev",
+    AutoConfigureEnabled:             true, // Enable auto-configuration (default)
+}
+
+// Create the Wristband auth instance
+auth, err := authConfig.WristbandAuth(
+    goauth.WithLogoutRedirectURL("/goodbye"),
+    goauth.WithHTTPClient(&http.Client{Timeout: 30 * time.Second}),
+)
+if err != nil {
+    log.Fatal("Failed to create Wristband auth:", err)
+}
+```
+
+#### Key Features:
 - **🏢 Multi-Tenant Architecture**: Built-in support for multi-tenant applications with custom domains
 - **🍪 Secure Session Management**: Encrypted cookie-based session storage with automatic token refresh
 - **🛡️ Security First**: Secure defaults with CSRF protection, encrypted cookies, and token validation
@@ -335,17 +358,10 @@ func apiCallHandler(w http.ResponseWriter, r *http.Request) {
 }
 ```
 
-<br/>// Create auth with options
-wristbandAuth, err := goauth.NewWristbandAuth(
-    authConfig,
-    goauth.WithHTTPClient(&http.Client{Timeout: 30 * time.Second}),
-    goauth.WithLogoutRedirectURL("/goodbye"),
-)
-```
 
 ## Wristband Auth Configuration Options
 
-The `WristbandAuthConfig` struct provides comprehensive configuration options for the SDK:
+The `AuthConfig` struct provides comprehensive configuration options for the SDK:
 
 ```go
 type AuthConfig struct {
@@ -409,7 +425,7 @@ type AuthConfig struct {
 The SDK supports both manual configuration and auto-configuration via the ConfigResolver:
 
 ```go
-// Configure Wristband authentication with ConfigResolver
+// Configure Wristband authentication with auto-configuration enabled
 authConfig := &goauth.AuthConfig{
     ClientID:                        "your-client-id",
     ClientSecret:                    "your-client-secret",
@@ -419,18 +435,31 @@ authConfig := &goauth.AuthConfig{
     TokenExpirationBuffer:          120, // 2 minutes
 }
 
-// Create Wristband auth instance with ConfigResolver
-wristbandAuth, err := goauth.NewWristbandAuth(goauth.WristbandAuthConfig{
-    Client:     authConfig.Client(),
-    Domains:    goauth.AppDomains{WristbandDomain: authConfig.WristbandApplicationVanityDomain},
-    AuthConfig: authConfig,
-})
+// Create Wristband auth instance
+wristbandAuth, err := authConfig.WristbandAuth()
 if err != nil {
     log.Fatal("Failed to create Wristband auth:", err)
 }
 
-// Get the ConfigResolver
-configResolver := wristbandAuth.GetConfigResolver()
+// Additional options can be passed to WristbandAuth()
+wristbandAuth, err := authConfig.WristbandAuth(
+    goauth.WithDefaultTenant("tenant-id"),        // Set default tenant
+    goauth.WithLogoutRedirectURL("/goodbye"),     // Custom logout redirect
+    goauth.WithHTTPClient(customHTTPClient),       // Custom HTTP client
+)
+```
+
+### Available Options
+
+The `WristbandAuth()` method accepts the following optional parameters:
+
+- **`WithDefaultTenant(tenantDomain string)`**: Sets a default tenant domain for the application
+- **`WithLogoutRedirectURL(url string)`**: Sets the URL users are redirected to after logout
+- **`WithHTTPClient(client *http.Client)`**: Uses a custom HTTP client for API requests
+- **`WithCookieEncryption(cookieEncryption CookieEncryption)`**: Provides a custom cookie encryption implementation
+- **`WithParseTenantFromRootDomain()`**: Enables tenant parsing from the request's host domain
+
+```go
 if configResolver != nil {
     // Get dynamic configuration values
     loginURL, err := configResolver.GetLoginURL()

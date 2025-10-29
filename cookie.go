@@ -97,7 +97,7 @@ func GetLoginStateCookie(cookieEncryption CookieEncryption, reqCtx HTTPContext) 
 	}
 
 	if matchingCookieName == "" {
-		return s, fmt.Errorf("login state cookie not found for state: %s", stateKey)
+		return s, NoLoginStateError
 	}
 
 	stateJSON, err := cookieEncryption.ReadEncrypted(reqCtx.CookieRequest(), matchingCookieName)

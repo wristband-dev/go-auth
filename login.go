@@ -2,8 +2,11 @@ package goauth
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -28,7 +31,37 @@ type LoginOptions struct {
 	// If a value is provided, then it takes precedence over the return_url request query parameter.
 	ReturnURL string
 
+	// DefaultTenantCustomDomain is an optional default tenant custom domain to use for the
+	// login request in the event the tenant custom domain cannot be found in the
+	// "tenant_custom_domain" request query parameter.
+	DefaultTenantCustomDomain string
+	// DefaultTenantName is an optional default tenant custom domain to use for the login request in the
+	// event the name cannot be found in either the subdomain or the "tenant_domain" request
+	// query parameter (depending on your subdomain configuration).
+	DefaultTenantName string
+
 	AuthorizeRequestOpts []AuthorizeRequestOption
+}
+
+// WithDefaultTenantCustomDomain sets the default tenant custom domain used for logins.
+func WithDefaultTenantCustomDomain(domain string) func(*LoginOptions) {
+	return func(o *LoginOptions) {
+		o.DefaultTenantCustomDomain = domain
+	}
+}
+
+// WithDefaultTenantName sets the default tenant name that should be used for logins.
+func WithDefaultTenantName(name string) func(*LoginOptions) {
+	return func(o *LoginOptions) {
+		o.DefaultTenantName = name
+	}
+}
+
+func (options *LoginOptions) hasTenantDefault() bool {
+	if options == nil {
+		return false
+	}
+	return options.DefaultTenantCustomDomain != "" || options.DefaultTenantName != ""
 }
 
 // DefaultLoginOptions returns default login options
@@ -37,7 +70,25 @@ func DefaultLoginOptions() *LoginOptions {
 }
 
 // HandleLogin initiates the login process by creating a login state and returning the authorization url.
-func (auth WristbandAuth) HandleLogin(httpCtx HTTPContext, callbackURL string, options *LoginOptions) (string, error) {
+func (auth WristbandAuth) HandleLogin(httpCtx HTTPContext, options *LoginOptions) (string, error) {
+	baseUrl, err := auth.loginBaseUrl(httpCtx, options)
+	if err != nil {
+		if errors.Is(err, NoTenantNameError) {
+			params := url.Values{}
+			params.Set("client_id", auth.Client.ClientID)
+			if returnUrl := options.returnUrl(httpCtx); returnUrl != "" {
+				params.Set("state", strconv.Quote(returnUrl))
+			}
+			if customUrl, err := auth.configResolver.GetCustomApplicationLoginPageURL(); err == nil && customUrl != "" {
+				return customUrl + "?" + params.Encode(), nil
+			} else if err != nil {
+				// TODO Log
+			}
+			return "https://" + auth.configResolver.GetWristbandApplicationVanityDomain() + "/login?" + params.Encode(), nil
+		}
+		return "", err
+	}
+
 	// Create login state with nonce, PKCE code verifier, etc.
 	state := CreateLoginState(httpCtx.Query(), options)
 
@@ -61,16 +112,50 @@ func (auth WristbandAuth) HandleLogin(httpCtx HTTPContext, callbackURL string, o
 	opts := []AuthorizeRequestOption{
 		WithNonce(state.Nonce),
 		WithCodeVerifier(state.CodeVerifier),
+		WithScopes(auth.configResolver.Scopes...),
 	}
 	if options != nil && options.AuthorizeRequestOpts != nil {
 		opts = append(options.AuthorizeRequestOpts, opts...)
 	}
 	// Create authorization request with state, nonce, and PKCE code verifier
-	authReq := auth.NewAuthorizeRequest(callbackURL, state.StateCookieKey,
+	authReq := auth.NewAuthorizeRequest(state.StateCookieKey,
 		opts...,
 	)
 	// Build authorization URL
-	return authReq.AuthorizeURL(httpCtx), nil
+	return authReq.AuthorizeURL(httpCtx, baseUrl), nil
+}
+
+const ReturnURLMaxLength = 450
+
+func (options *LoginOptions) returnUrl(req HTTPContext) string {
+	returnURL := req.Query().Get("return_url")
+	if returnURL == "" && options != nil && options.ReturnURL != "" {
+		returnURL = options.ReturnURL
+	}
+	if len(returnURL) > ReturnURLMaxLength {
+		return ""
+	}
+	return returnURL
+}
+
+func (auth WristbandAuth) loginBaseUrl(req HTTPContext, options *LoginOptions) (string, error) {
+	if customTenantDomain, ok := auth.RequestCustomTenantName(req); ok {
+		return customTenantDomain, nil
+	}
+	if tenantName, err := auth.RequestTenantName(req); err == nil {
+		return strings.Join([]string{tenantName, auth.configResolver.WristbandApplicationVanityDomain}, auth.separator()), nil
+	} else {
+		// TODO Log
+	}
+
+	if !options.hasTenantDefault() {
+		return "", NoTenantNameError
+	}
+
+	if options.DefaultTenantCustomDomain != "" {
+		return options.DefaultTenantCustomDomain, nil
+	}
+	return strings.Join([]string{options.DefaultTenantName, auth.configResolver.WristbandApplicationVanityDomain}, auth.separator()), nil
 }
 
 // cleanupOldLoginCookies removes all but the 2 most recent login state cookies.
@@ -145,22 +230,26 @@ func (state LoginState) CookieName() string {
 
 // CallbackContext contains contextual information retrieved in the callback endpoint.
 type CallbackContext struct {
-	TokenResponse TokenResponse
-	LoginState    LoginState
-	UserInfo      UserInfoResponse
+	TokenResponse      TokenResponse
+	LoginState         LoginState
+	UserInfo           UserInfoResponse
+	TenantName         string
+	CustomTenantDomain string
 }
 
+var NoLoginStateError = errors.New("no login state found")
+
 // HandleCallback processes the OAuth callback, exchanges the authorization code for tokens.
-func (auth WristbandAuth) HandleCallback(ctx HTTPContext, callbackURL string) (*CallbackContext, error) {
-	queryValues := ctx.Query()
+func (auth WristbandAuth) HandleCallback(httpCtx HTTPContext, callbackURL string) (*CallbackContext, error) {
+	queryValues := httpCtx.Query()
 	if err := RequestError(queryValues); err != nil {
 		return nil, err
 	}
-	inputs := getCallbackInputs(queryValues)
+	inputs := auth.getCallbackInputs(httpCtx)
 	if inputs.Code == "" {
 		return nil, InvalidParameterError("code")
 	}
-	loginState, err := GetLoginStateCookie(auth.cookieEncryption, ctx)
+	loginState, err := GetLoginStateCookie(auth.cookieEncryption, httpCtx)
 	if err != nil {
 		return nil, err
 	}
@@ -181,9 +270,11 @@ func (auth WristbandAuth) HandleCallback(ctx HTTPContext, callbackURL string) (*
 
 	// Create callback context with token response, login state, and user info
 	return &CallbackContext{
-		TokenResponse: tokenResponse,
-		LoginState:    loginState,
-		UserInfo:      userInfo,
+		TokenResponse:      tokenResponse,
+		LoginState:         loginState,
+		UserInfo:           userInfo,
+		TenantName:         inputs.TenantName,
+		CustomTenantDomain: inputs.TenantCustomDomain,
 	}, nil
 }
 
@@ -192,15 +283,17 @@ func (ctx CallbackContext) Session() *Session {
 	expiresIn := time.Second * time.Duration(ctx.TokenResponse.ExpiresIn)
 	expiresAt := time.Now().Add(expiresIn)
 	return &Session{
-		AccessToken:  ctx.TokenResponse.AccessToken,
-		RefreshToken: ctx.TokenResponse.RefreshToken,
-		IDToken:      ctx.TokenResponse.IDToken,
-		ExpiresAt:    expiresAt,
-		ExpiresIn:    expiresIn,
-		UserInfo:     ctx.UserInfo,
-		ReturnURL:    ctx.LoginState.ReturnURL,
-		UserID:       ctx.UserInfo.Sub,
-		Name:         ctx.UserInfo.Name,
-		TenantID:     ctx.UserInfo.TenantID,
+		AccessToken:        ctx.TokenResponse.AccessToken,
+		RefreshToken:       ctx.TokenResponse.RefreshToken,
+		IDToken:            ctx.TokenResponse.IDToken,
+		ExpiresAt:          expiresAt,
+		ExpiresIn:          expiresIn,
+		UserInfo:           ctx.UserInfo,
+		ReturnURL:          ctx.LoginState.ReturnURL,
+		UserID:             ctx.UserInfo.Sub,
+		Name:               ctx.UserInfo.Name,
+		TenantID:           ctx.UserInfo.TenantID,
+		CustomTenantDomain: ctx.CustomTenantDomain,
+		TenantName:         ctx.TenantName,
 	}
 }

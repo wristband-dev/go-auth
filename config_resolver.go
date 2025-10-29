@@ -13,7 +13,7 @@ const TenantDomainToken = "{tenant_domain}"
 // ConfigResolver resolves and validates Wristband authentication configuration,
 // supporting both manual configuration and auto-configuration via the Wristband SDK configuration endpoint
 type ConfigResolver struct {
-	authConfig      *AuthConfig
+	*AuthConfig
 	wristbandApi    ConfidentialClient
 	sdkConfigCache  *SdkConfiguration
 	configPromise   chan *SdkConfiguration
@@ -23,13 +23,6 @@ type ConfigResolver struct {
 
 // NewConfigResolver creates a new ConfigResolver with the provided AuthConfig
 func NewConfigResolver(authConfig *AuthConfig) (*ConfigResolver, error) {
-	// Set defaults
-	if !authConfig.AutoConfigureEnabled {
-		// Auto-configure is disabled by default in the struct, but we want it enabled by default
-		// based on the other SDKs pattern
-		authConfig.AutoConfigureEnabled = true
-	}
-
 	if len(authConfig.Scopes) == 0 {
 		authConfig.Scopes = DefaultScopes
 	}
@@ -39,7 +32,7 @@ func NewConfigResolver(authConfig *AuthConfig) (*ConfigResolver, error) {
 	}
 
 	resolver := &ConfigResolver{
-		authConfig:     authConfig,
+		AuthConfig:     authConfig,
 		configPromise:  make(chan *SdkConfiguration, 1),
 		sdkConfigCache: nil,
 	}
@@ -49,9 +42,13 @@ func NewConfigResolver(authConfig *AuthConfig) (*ConfigResolver, error) {
 		return nil, err
 	}
 
+	resolver.wristbandApi = authConfig.Client()
 	if authConfig.AutoConfigureEnabled {
 		// Only validate manually provided values when auto-configure is enabled
 		if err := resolver.validatePartialUrlAuthConfigs(); err != nil {
+			return nil, err
+		}
+		if err := resolver.PreloadSdkConfig(); err != nil {
 			return nil, err
 		}
 	} else {
@@ -61,7 +58,6 @@ func NewConfigResolver(authConfig *AuthConfig) (*ConfigResolver, error) {
 		}
 	}
 
-	resolver.wristbandApi = authConfig.Client()
 	return resolver, nil
 }
 
@@ -167,29 +163,29 @@ func (cr *ConfigResolver) fetchSdkConfiguration() (*SdkConfiguration, error) {
 }
 
 func (cr *ConfigResolver) validateRequiredAuthConfigs() error {
-	if cr.authConfig.ClientID == "" {
+	if cr.ClientID == "" {
 		return fmt.Errorf("the [client_id] config must have a value")
 	}
-	if cr.authConfig.ClientSecret == "" {
+	if cr.ClientSecret == "" {
 		return fmt.Errorf("the [client_secret] config must have a value")
 	}
-	if cr.authConfig.LoginStateSecret != "" && len(cr.authConfig.LoginStateSecret) < 32 {
+	if cr.LoginStateSecret != "" && len(cr.LoginStateSecret) < 32 {
 		return fmt.Errorf("the [login_state_secret] config must have a value of at least 32 characters")
 	}
-	if cr.authConfig.WristbandApplicationVanityDomain == "" {
+	if cr.WristbandApplicationVanityDomain == "" {
 		return fmt.Errorf("the [wristband_application_vanity_domain] config must have a value")
 	}
-	if cr.authConfig.TokenExpirationBuffer < 0 {
+	if cr.TokenExpirationBuffer < 0 {
 		return fmt.Errorf("the [token_expiration_buffer] config must be greater than or equal to 0")
 	}
 	return nil
 }
 
 func (cr *ConfigResolver) validateStrictUrlAuthConfigs() error {
-	if cr.authConfig.LoginURL == "" {
+	if cr.LoginURL == "" {
 		return fmt.Errorf("the [login_url] config must have a value when auto-configure is disabled")
 	}
-	if cr.authConfig.RedirectURI == "" {
+	if cr.RedirectURI == "" {
 		return fmt.Errorf("the [redirect_uri] config must have a value when auto-configure is disabled")
 	}
 
@@ -201,22 +197,22 @@ func (cr *ConfigResolver) validatePartialUrlAuthConfigs() error {
 }
 
 func (cr *ConfigResolver) validateTenantDomainTokens() error {
-	if cr.authConfig.ParseTenantFromRootDomain != "" {
-		if strings.Contains(cr.authConfig.LoginURL, TenantDomainToken) {
+	if cr.ParseTenantFromRootDomain != "" {
+		if strings.Contains(cr.LoginURL, TenantDomainToken) {
 			// Valid - token is present when required
 		} else {
 			return fmt.Errorf("the [login_url] must contain the \"%s\" token when using the [parse_tenant_from_root_domain] config", TenantDomainToken)
 		}
-		if strings.Contains(cr.authConfig.RedirectURI, TenantDomainToken) {
+		if strings.Contains(cr.RedirectURI, TenantDomainToken) {
 			// Valid - token is present when required
 		} else {
 			return fmt.Errorf("the [redirect_uri] must contain the \"%s\" token when using the [parse_tenant_from_root_domain] config", TenantDomainToken)
 		}
 	} else {
-		if strings.Contains(cr.authConfig.LoginURL, TenantDomainToken) {
+		if strings.Contains(cr.LoginURL, TenantDomainToken) {
 			return fmt.Errorf("the [login_url] cannot contain the \"%s\" token when the [parse_tenant_from_root_domain] is absent", TenantDomainToken)
 		}
-		if strings.Contains(cr.authConfig.RedirectURI, TenantDomainToken) {
+		if strings.Contains(cr.RedirectURI, TenantDomainToken) {
 			return fmt.Errorf("the [redirect_uri] cannot contain the \"%s\" token when the [parse_tenant_from_root_domain] is absent", TenantDomainToken)
 		}
 	}
@@ -233,17 +229,17 @@ func (cr *ConfigResolver) validateAllDynamicConfigs(sdkConfig *SdkConfiguration)
 	}
 
 	// Use manual config values if provided, otherwise use SDK config values
-	loginURL := cr.authConfig.LoginURL
+	loginURL := cr.LoginURL
 	if loginURL == "" {
 		loginURL = sdkConfig.LoginURL
 	}
 
-	redirectURI := cr.authConfig.RedirectURI
+	redirectURI := cr.RedirectURI
 	if redirectURI == "" {
 		redirectURI = sdkConfig.RedirectURI
 	}
 
-	parseTenantFromRootDomain := cr.authConfig.ParseTenantFromRootDomain
+	parseTenantFromRootDomain := cr.ParseTenantFromRootDomain
 	if parseTenantFromRootDomain == "" && sdkConfig.LoginURLTenantDomainSuffix != "" {
 		parseTenantFromRootDomain = sdkConfig.LoginURLTenantDomainSuffix
 	}
@@ -270,45 +266,45 @@ func (cr *ConfigResolver) validateAllDynamicConfigs(sdkConfig *SdkConfiguration)
 
 // Static configuration getters
 func (cr *ConfigResolver) GetClientID() string {
-	return cr.authConfig.ClientID
+	return cr.ClientID
 }
 
 func (cr *ConfigResolver) GetClientSecret() string {
-	return cr.authConfig.ClientSecret
+	return cr.ClientSecret
 }
 
 func (cr *ConfigResolver) GetLoginStateSecret() string {
-	if cr.authConfig.LoginStateSecret != "" {
-		return cr.authConfig.LoginStateSecret
+	if cr.LoginStateSecret != "" {
+		return cr.LoginStateSecret
 	}
-	return cr.authConfig.ClientSecret
+	return cr.ClientSecret
 }
 
 func (cr *ConfigResolver) GetWristbandApplicationVanityDomain() string {
-	return cr.authConfig.WristbandApplicationVanityDomain
+	return cr.WristbandApplicationVanityDomain
 }
 
 func (cr *ConfigResolver) GetDangerouslyDisableSecureCookies() bool {
-	return cr.authConfig.DangerouslyDisableSecureCookies
+	return cr.DangerouslyDisableSecureCookies
 }
 
 func (cr *ConfigResolver) GetScopes() []string {
-	return cr.authConfig.Scopes
+	return cr.Scopes
 }
 
 func (cr *ConfigResolver) GetAutoConfigureEnabled() bool {
-	return cr.authConfig.AutoConfigureEnabled
+	return cr.AutoConfigureEnabled
 }
 
 func (cr *ConfigResolver) GetTokenExpirationBuffer() int {
-	return cr.authConfig.TokenExpirationBuffer
+	return cr.TokenExpirationBuffer
 }
 
 // Dynamic configuration getters
 func (cr *ConfigResolver) GetCustomApplicationLoginPageURL() (string, error) {
 	// 1. Check if manually provided in authConfig
-	if cr.authConfig.CustomApplicationLoginPageURL != "" {
-		return cr.authConfig.CustomApplicationLoginPageURL, nil
+	if cr.SdkConfiguration != nil {
+		return cr.CustomApplicationLoginPageURL, nil
 	}
 
 	// 2. If auto-configure is enabled, get from SDK config
@@ -324,29 +320,30 @@ func (cr *ConfigResolver) GetCustomApplicationLoginPageURL() (string, error) {
 	return "", nil
 }
 
-func (cr *ConfigResolver) GetIsApplicationCustomDomainActive() (bool, error) {
+func (cr *ConfigResolver) GetIsApplicationCustomDomainActive() bool {
 	// 1. Check if manually provided in authConfig
-	if cr.authConfig.IsApplicationCustomDomainActive != nil {
-		return *cr.authConfig.IsApplicationCustomDomainActive, nil
+	if cr.SdkConfiguration != nil {
+		return cr.IsApplicationCustomDomainActive
 	}
 
 	// 2. If auto-configure is enabled, get from SDK config
 	if cr.GetAutoConfigureEnabled() {
 		sdkConfig, err := cr.loadSdkConfig()
 		if err != nil {
-			return false, err
+			// TODO Log
+			return false
 		}
-		return sdkConfig.IsApplicationCustomDomainActive, nil
+		return sdkConfig.IsApplicationCustomDomainActive
 	}
 
 	// 3. Default fallback
-	return false, nil
+	return false
 }
 
 func (cr *ConfigResolver) GetLoginURL() (string, error) {
 	// 1. Check if manually provided in authConfig
-	if cr.authConfig.LoginURL != "" {
-		return cr.authConfig.LoginURL, nil
+	if cr.SdkConfiguration != nil {
+		return cr.LoginURL, nil
 	}
 
 	// 2. If auto-configure is enabled, get from SDK config
@@ -362,40 +359,41 @@ func (cr *ConfigResolver) GetLoginURL() (string, error) {
 	return "", fmt.Errorf("the [login_url] config must have a value")
 }
 
-func (cr *ConfigResolver) GetParseTenantFromRootDomain() (string, error) {
+func (cr *ConfigResolver) GetParseTenantFromRootDomain() string {
 	// 1. Check if manually provided in authConfig
-	if cr.authConfig.ParseTenantFromRootDomain != "" {
-		return cr.authConfig.ParseTenantFromRootDomain, nil
+	if cr.ParseTenantFromRootDomain != "" {
+		return cr.ParseTenantFromRootDomain
 	}
 
 	// 2. If auto-configure is enabled, get from SDK config
 	if cr.GetAutoConfigureEnabled() {
 		sdkConfig, err := cr.loadSdkConfig()
 		if err != nil {
-			return "", err
+			// TODO Log
+			return ""
 		}
-		return sdkConfig.LoginURLTenantDomainSuffix, nil
+		return sdkConfig.LoginURLTenantDomainSuffix
 	}
 
 	// 3. Default fallback
-	return "", nil
+	return ""
 }
 
-func (cr *ConfigResolver) GetRedirectURI() (string, error) {
+func (cr *ConfigResolver) GetRedirectURI() string {
 	// 1. Check if manually provided in authConfig
-	if cr.authConfig.RedirectURI != "" {
-		return cr.authConfig.RedirectURI, nil
+	if cr.SdkConfiguration != nil {
+		return cr.RedirectURI
 	}
 
 	// 2. If auto-configure is enabled, get from SDK config
 	if cr.GetAutoConfigureEnabled() {
-		sdkConfig, err := cr.loadSdkConfig()
-		if err != nil {
-			return "", err
+		if sdkConfig, err := cr.loadSdkConfig(); err == nil {
+			return sdkConfig.RedirectURI
+		} else {
+			// TODO Log
 		}
-		return sdkConfig.RedirectURI, nil
 	}
 
-	// 3. This should not happen if validation is done properly
-	return "", fmt.Errorf("the [redirect_uri] config must have a value")
+	// 3. Default fallback
+	return ""
 }

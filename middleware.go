@@ -38,7 +38,7 @@ func (app WristbandApp) RefreshTokenIfExpired(next http.Handler) http.Handler {
 		}
 
 		// Check if access token is expired or about to expire
-		bufferDuration := time.Duration(app.tokenExpiryBuffer) * time.Second
+		bufferDuration := time.Duration(app.configResolver.GetTokenExpirationBuffer()) * time.Second
 		if time.Now().Add(bufferDuration).Before(session.ExpiresAt) {
 			// Token is still valid, continue to next handler
 			next.ServeHTTP(res, req)

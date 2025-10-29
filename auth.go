@@ -1,7 +1,6 @@
 package goauth
 
 import (
-	"errors"
 	"fmt"
 	"net/http"
 
@@ -9,75 +8,44 @@ import (
 	"github.com/wristband-dev/go-auth/rand"
 )
 
-// WristbandAuthConfig holds the configuration for Wristband authentication that is required.
-type WristbandAuthConfig struct {
-	// Client is the confidential client used for authentication.
-	Client ConfidentialClient
-	// Domains provides the application domain configuration.
-	Domains AppDomains
-	// SecretKey is the key used for encrypting cookies.
-	// If empty, a random key will be generated. If set, it must be 32 bytes long.
-	SecretKey []byte
-	// AuthConfig provides the authentication configuration for the new config resolver pattern.
-	// This is an alternative to the individual fields above and provides more flexibility.
-	AuthConfig *AuthConfig
-}
-
-// NewWristbandAuth returns a new WristbandAuth instance configured with the provided settings.
-func NewWristbandAuth(cfg WristbandAuthConfig, opts ...AuthOption) (WristbandAuth, error) {
-	if err := cfg.Domains.Validate(); err != nil {
-		return WristbandAuth{}, fmt.Errorf("invalid domains configuration: %w", err)
-	}
-	if cfg.Domains.DefaultDomains != nil {
-		separator := "-"
-		if cfg.Domains.IsApplicationCustomDomainActive {
-			separator = "."
-		}
-		cfg.Domains.DefaultDomains.separator = separator
+// WristbandAuth creates a WristbandAuth instance from this AuthConfig.
+func (ac *AuthConfig) WristbandAuth(opts ...AuthOption) (WristbandAuth, error) {
+	resolver, err := NewConfigResolver(ac)
+	if err != nil {
+		return WristbandAuth{}, err
 	}
 
-	if len(cfg.SecretKey) != 0 && len(cfg.SecretKey) != 32 {
-		return WristbandAuth{}, errors.New("secret key is must be exactly 32 bytes")
-	}
-
-	// If AuthConfig is provided, create a ConfigResolver
-	var configResolver *ConfigResolver
-	if cfg.AuthConfig != nil {
-		var err error
-		configResolver, err = NewConfigResolver(cfg.AuthConfig)
-		if err != nil {
-			return WristbandAuth{}, fmt.Errorf("failed to create config resolver: %w", err)
-		}
-	}
-
+	// Initialize WristbandAuth with all required fields
 	auth := WristbandAuth{
-		Client:            cfg.Client,
-		Domains:           cfg.Domains,
-		Scopes:            defaultScopes,
-		tokenEndpoint:     DefaultTokenEndpoint,
-		authorizeEndpoint: DefaultAuthorizeEndpoint,
-		userInfoEndpoint:  DefaultUserInfoEndpoint,
-		logoutEndpoint:    DefaultLogoutEndpoint,
-		revokeEndpoint:    DefaultRevokeEndpoint,
-		endpointRoot:      cfg.Domains.WristbandDomain + DefaultAPIPath,
-		httpClient:        http.DefaultClient,
-		tokenExpiryBuffer: DefaultTokenExpiryBuffer,
-		logoutRedirectURI: "/",
-		configResolver:    configResolver,
+		Client:           ac.Client(),
+		tokenEndpoint:    DefaultTokenEndpoint,
+		userInfoEndpoint: DefaultUserInfoEndpoint,
+		revokeEndpoint:   DefaultRevokeEndpoint,
+		endpointRoot:     ac.WristbandApplicationVanityDomain + DefaultAPIPath,
+		httpClient:       http.DefaultClient,
+		configResolver:   resolver,
 	}
 
+	// Apply any provided options
 	for _, opt := range opts {
 		opt.apply(&auth)
 	}
 
+	// Set up cookie encryption
 	if auth.cookieEncryption == nil {
-		key := cfg.SecretKey
-		if len(key) == 0 {
+		// Use LoginStateSecret if provided, otherwise use ClientSecret
+		key := []byte(resolver.GetLoginStateSecret())
+		if len(key) < 32 {
+			// Generate a random key if the secret is too short
 			key = rand.GenerateRandomKey(32)
+		} else if len(key) > 32 {
+			// Truncate to 32 bytes if too long
+			key = key[:32]
 		}
 		auth.cookieEncryption = cookies.NewCookieEncryptor(key)
 	}
 
+	// Set the token URL
 	auth.tokenURL = fmt.Sprintf("https://%s", auth.endpointRoot+auth.tokenEndpoint)
 
 	return auth, nil
@@ -88,36 +56,20 @@ type WristbandAuth struct {
 	// Required configuration
 	Client ConfidentialClient
 
-	// Domains provides the application domain configuration.
-	Domains AppDomains
-
-	// Scopes are the requested scopes for the auth requests.
-	Scopes []string
-
 	// Endpoint customization (optional)
-	tokenEndpoint        string
-	authorizeEndpoint    string
-	userInfoEndpoint     string
-	logoutEndpoint       string
-	revokeEndpoint       string
-	endpointRoot         string
-	logoutRedirectURI    string // Optional redirect URI after logout if no redirect is resolved from the request.
-	logoutStateParameter string
+	tokenEndpoint    string
+	userInfoEndpoint string
+	revokeEndpoint   string
+	endpointRoot     string
 
 	// Advanced settings
-	httpClient        *http.Client
-	tokenExpiryBuffer int // seconds
+	httpClient *http.Client
 
 	cookieEncryption CookieEncryption
 	tokenURL         string
 
 	// ConfigResolver provides dynamic configuration resolution
 	configResolver *ConfigResolver
-}
-
-// ResolveLogoutEndpoint returns the logout endpoint URL for a given set of query values.
-func (auth WristbandAuth) ResolveLogoutEndpoint(req HTTPRequest) string {
-	return auth.Domains.TenantedHost(req) + auth.logoutEndpoint
 }
 
 // UserInfoEndpoint returns the user info endpoint URL for fetching user details.
@@ -129,7 +81,7 @@ func (auth WristbandAuth) UserInfoEndpoint() string {
 func (auth WristbandAuth) CodeTokenRequest(code, codeVerifier, redirectURI string) TokenRequest {
 	return TokenRequest{
 		Client:       auth.Client,
-		Scopes:       auth.Scopes,
+		Scopes:       auth.configResolver.GetScopes(),
 		Endpoint:     auth.tokenURL,
 		GrantType:    GrantTypeCode,
 		Code:         code,
@@ -138,54 +90,9 @@ func (auth WristbandAuth) CodeTokenRequest(code, codeVerifier, redirectURI strin
 	}
 }
 
-// TokenRequestConf returns the configuration for building token requests.
-func (auth WristbandAuth) TokenRequestConf() TokenRequestConfig {
-	return TokenRequestConfig{
-		Client:   auth.Client,
-		Endpoint: auth.tokenURL,
-	}
-}
-
 // RevokeEndpoint returns the endpoint URL for revoking tokens.
 func (auth WristbandAuth) RevokeEndpoint() string {
 	return auth.endpointRoot + auth.revokeEndpoint
-}
-
-// GetConfigResolver returns the ConfigResolver if available
-func (auth WristbandAuth) GetConfigResolver() *ConfigResolver {
-	return auth.configResolver
-}
-
-// GetClientID returns the client ID from the ConfigResolver if available, otherwise from the Client
-func (auth WristbandAuth) GetClientID() string {
-	if auth.configResolver != nil {
-		return auth.configResolver.GetClientID()
-	}
-	return auth.Client.ClientID
-}
-
-// GetClientSecret returns the client secret from the ConfigResolver if available, otherwise from the Client
-func (auth WristbandAuth) GetClientSecret() string {
-	if auth.configResolver != nil {
-		return auth.configResolver.GetClientSecret()
-	}
-	return auth.Client.ClientSecret
-}
-
-// GetScopes returns the scopes from the ConfigResolver if available, otherwise from the auth instance
-func (auth WristbandAuth) GetScopes() []string {
-	if auth.configResolver != nil {
-		return auth.configResolver.GetScopes()
-	}
-	return auth.Scopes
-}
-
-// GetTokenExpiryBuffer returns the token expiry buffer from the ConfigResolver if available, otherwise from the auth instance
-func (auth WristbandAuth) GetTokenExpiryBuffer() int {
-	if auth.configResolver != nil {
-		return auth.configResolver.GetTokenExpirationBuffer()
-	}
-	return auth.tokenExpiryBuffer
 }
 
 // AuthOption is an interface for options that can be applied to modify the WristbandAuth configuration.
@@ -200,24 +107,10 @@ func WithHTTPClient(client *http.Client) AuthOption {
 	})
 }
 
-// WithLogoutRedirectURL allows setting the url that users will be redirected to when logging out.
-func WithLogoutRedirectURL(url string) AuthOption {
-	return authOptionFunc(func(c *WristbandAuth) {
-		c.logoutRedirectURI = url
-	})
-}
-
 // WithCookieEncryption allows setting a custom CookieEncryption implementation.
 func WithCookieEncryption(cookieEncryption CookieEncryption) AuthOption {
 	return authOptionFunc(func(c *WristbandAuth) {
 		c.cookieEncryption = cookieEncryption
-	})
-}
-
-// WithParseTenantFromRootDomain indicates that the tenant should be derived from the incoming request's host.
-func WithParseTenantFromRootDomain() AuthOption {
-	return authOptionFunc(func(c *WristbandAuth) {
-		c.Domains.ParseTenantFromRootDomain = true
 	})
 }
 

@@ -26,7 +26,7 @@ func (m *mockHTTPRequest) Host() string {
 	return m.host
 }
 
-// Test LogoutURL method
+// Test LogoutUrl method
 
 func TestWristbandAuth_LogoutURL_WithTenantedHost(t *testing.T) {
 	auth := WristbandAuth{
@@ -45,7 +45,7 @@ func TestWristbandAuth_LogoutURL_WithTenantedHost(t *testing.T) {
 	req := newMockHTTPRequest()
 	req.queryValues.Set("tenant_domain", "tenant1")
 
-	logoutURL := auth.LogoutURL(req)
+	logoutURL := auth.LogoutUrl(req)
 
 	// Parse the URL to verify components
 	parsedURL, err := url.Parse(logoutURL)
@@ -89,7 +89,7 @@ func TestWristbandAuth_LogoutURL_WithCustomTenantDomain(t *testing.T) {
 	req := newMockHTTPRequest()
 	req.queryValues.Set("tenant_custom_domain", "custom.tenant.com")
 
-	logoutURL := auth.LogoutURL(req)
+	logoutURL := auth.LogoutUrl(req)
 
 	// Parse the URL to verify components
 	parsedURL, err := url.Parse(logoutURL)
@@ -125,7 +125,7 @@ func TestWristbandAuth_LogoutURL_NoTenantedHost_WithLogoutRedirectURI(t *testing
 
 	req := newMockHTTPRequest() // No tenant domain parameters
 
-	logoutURL := auth.LogoutURL(req)
+	logoutURL := auth.LogoutUrl(req)
 
 	expected := "https://example.com/goodbye"
 	if logoutURL != expected {
@@ -141,7 +141,7 @@ func TestWristbandAuth_LogoutURL_NoTenantedHost_NoLogoutRedirectURI(t *testing.T
 
 	req := newMockHTTPRequest() // No tenant domain parameters
 
-	logoutURL := auth.LogoutURL(req)
+	logoutURL := auth.LogoutUrl(req)
 
 	expected := "https://test.wristband.com/login?client_id=test-client-id"
 	if logoutURL != expected {
@@ -164,7 +164,7 @@ func TestWristbandAuth_LogoutURL_MinimalParameters(t *testing.T) {
 	req := newMockHTTPRequest()
 	req.queryValues.Set("tenant_domain", "minimal-tenant")
 
-	logoutURL := auth.LogoutURL(req)
+	logoutURL := auth.LogoutUrl(req)
 
 	// Parse the URL to verify components
 	parsedURL, err := url.Parse(logoutURL)
@@ -200,7 +200,7 @@ func TestWristbandAuth_LogoutURL_EmptyClientID(t *testing.T) {
 	req := newMockHTTPRequest()
 	req.queryValues.Set("tenant_domain", "tenant1")
 
-	logoutURL := auth.LogoutURL(req)
+	logoutURL := auth.LogoutUrl(req)
 
 	// Parse the URL to verify components
 	parsedURL, err := url.Parse(logoutURL)
@@ -235,7 +235,7 @@ func TestWristbandAuth_LogoutURL_SpecialCharactersInParameters(t *testing.T) {
 	req := newMockHTTPRequest()
 	req.queryValues.Set("tenant_domain", "tenant1")
 
-	logoutURL := auth.LogoutURL(req)
+	logoutURL := auth.LogoutUrl(req)
 
 	// Parse the URL to verify components
 	parsedURL, err := url.Parse(logoutURL)
@@ -272,7 +272,7 @@ func TestWristbandAuth_LogoutURL_WithApplicationCustomDomain(t *testing.T) {
 	req := newMockHTTPRequest()
 	req.queryValues.Set("tenant_domain", "tenant1")
 
-	logoutURL := auth.LogoutURL(req)
+	logoutURL := auth.LogoutUrl(req)
 
 	// Parse the URL to verify components
 	parsedURL, err := url.Parse(logoutURL)
@@ -300,7 +300,7 @@ func TestWristbandAuth_LogoutURL_ParseTenantFromRootDomain(t *testing.T) {
 	req := newMockHTTPRequest()
 	req.host = "tenant1.example.com"
 
-	logoutURL := auth.LogoutURL(req)
+	logoutURL := auth.LogoutUrl(req)
 
 	// Parse the URL to verify components
 	parsedURL, err := url.Parse(logoutURL)
@@ -328,7 +328,7 @@ func TestWristbandAuth_LogoutURL_BothTenantAndCustomDomain(t *testing.T) {
 	req.queryValues.Set("tenant_domain", "tenant1")
 	req.queryValues.Set("tenant_custom_domain", "custom.tenant.com")
 
-	logoutURL := auth.LogoutURL(req)
+	logoutURL := auth.LogoutUrl(req)
 
 	// Parse the URL to verify components
 	parsedURL, err := url.Parse(logoutURL)
@@ -360,7 +360,7 @@ func TestWristbandAuth_LogoutURL_URLEncoding(t *testing.T) {
 	req := newMockHTTPRequest()
 	req.queryValues.Set("tenant_domain", "tenant1")
 
-	logoutURL := auth.LogoutURL(req)
+	logoutURL := auth.LogoutUrl(req)
 
 	// Verify URL contains properly encoded parameters
 	if !strings.Contains(logoutURL, "redirect_url=https%3A%2F%2Fexample.com%2Flogout%3Fsuccess%3Dtrue%26message%3Dlogged+out") {
@@ -382,7 +382,7 @@ func TestWristbandAuth_LogoutURL_EmptyTenantDomain(t *testing.T) {
 	req := newMockHTTPRequest()
 	req.queryValues.Set("tenant_domain", "") // Empty tenant domain
 
-	logoutURL := auth.LogoutURL(req)
+	logoutURL := auth.LogoutUrl(req)
 
 	// With empty tenant domain, it should still create a tenanted host with empty tenant
 	// This results in "-test.wristband.com"
@@ -402,11 +402,11 @@ func TestWristbandAuth_LogoutURL_NilRequest(t *testing.T) {
 	// This would panic in real usage, but demonstrates the method's dependency on HTTPRequest
 	defer func() {
 		if r := recover(); r == nil {
-			t.Error("Expected panic when calling LogoutURL with nil request")
+			t.Error("Expected panic when calling LogoutUrl with nil request")
 		}
 	}()
 
-	auth.LogoutURL(nil)
+	auth.LogoutUrl(nil)
 }
 
 func TestWristbandAuth_LogoutURL_LongParameters(t *testing.T) {
@@ -431,7 +431,7 @@ func TestWristbandAuth_LogoutURL_LongParameters(t *testing.T) {
 	req := newMockHTTPRequest()
 	req.queryValues.Set("tenant_domain", "tenant1")
 
-	logoutURL := auth.LogoutURL(req)
+	logoutURL := auth.LogoutUrl(req)
 
 	// Parse the URL to verify it's still valid
 	parsedURL, err := url.Parse(logoutURL)
@@ -464,7 +464,7 @@ func TestWristbandAuth_LogoutURL_EmptyWristbandDomain(t *testing.T) {
 
 	req := newMockHTTPRequest()
 
-	logoutURL := auth.LogoutURL(req)
+	logoutURL := auth.LogoutUrl(req)
 
 	// Should still work but result in malformed URL
 	expected := "https:///login?client_id=test-client-id"
@@ -488,7 +488,7 @@ func TestWristbandAuth_LogoutURL_DefaultLogoutEndpoint(t *testing.T) {
 	req := newMockHTTPRequest()
 	req.queryValues.Set("tenant_domain", "tenant1")
 
-	logoutURL := auth.LogoutURL(req)
+	logoutURL := auth.LogoutUrl(req)
 
 	// Verify the default logout endpoint is used
 	if !strings.Contains(logoutURL, DefaultLogoutEndpoint) {
@@ -517,7 +517,7 @@ func BenchmarkWristbandAuth_LogoutURL_WithTenant(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = auth.LogoutURL(req)
+		_ = auth.LogoutUrl(req)
 	}
 }
 
@@ -532,7 +532,7 @@ func BenchmarkWristbandAuth_LogoutURL_NoTenant(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = auth.LogoutURL(req)
+		_ = auth.LogoutUrl(req)
 	}
 }
 
@@ -551,6 +551,6 @@ func BenchmarkWristbandAuth_LogoutURL_CustomDomain(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = auth.LogoutURL(req)
+		_ = auth.LogoutUrl(req)
 	}
 }

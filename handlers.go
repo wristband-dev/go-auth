@@ -3,6 +3,7 @@ package goauth
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -16,14 +17,16 @@ type (
 		RefreshToken string `json:"refresh_token"`
 		IDToken      string `json:"-"`
 		// ExpiresAt is the expiration time of the access token.
-		ExpiresAt time.Time        `json:"expires_at"`
-		ExpiresIn time.Duration    `json:"expiresIn"`
-		UserInfo  UserInfoResponse `json:"user_info"`
-		ReturnURL string           `json:"-"`
-		UserID    string           `json:"userID"`
-		Name      string           `json:"name"`
-		TenantID  string           `json:"tenantId"`
-		IDPName   string           `json:"idpName"`
+		ExpiresAt          time.Time        `json:"expires_at"`
+		ExpiresIn          time.Duration    `json:"expiresIn"`
+		UserInfo           UserInfoResponse `json:"user_info"`
+		ReturnURL          string           `json:"-"`
+		UserID             string           `json:"userID"`
+		Name               string           `json:"name"`
+		TenantID           string           `json:"tenantId"`
+		IDPName            string           `json:"idpName"`
+		TenantName         string           `json:"tenantName"`
+		CustomTenantDomain string           `json:"customTenantDomain"`
 	}
 
 	// SessionManager defines the interface for session management
@@ -97,7 +100,7 @@ type WristbandApp struct {
 
 // LoginEndpoint returns the full URL for the login endpoint.
 func (app WristbandApp) LoginEndpoint() string {
-	return app.Domains.WristbandDomain + app.LoginPath
+	return app.configResolver.WristbandApplicationVanityDomain + app.LoginPath
 }
 
 // HTTPContext creates a new HTTPContext for the standard library request and response.
@@ -122,18 +125,8 @@ func (app WristbandApp) LoginHandler(opts ...func(*LoginOptions)) http.HandlerFu
 		res.Header().Set("Cache-Control", "no-cache, no-store")
 		res.Header().Set("Pragma", "no-cache")
 
-		if domains := app.Domains.RequestTenantDomains(httpCtx); domains == nil || domains.TenantDomain == "" {
-			if app.Domains.CustomApplicationLoginPageURL != "" {
-				http.Redirect(res, req, fmt.Sprintf("%s?client_id=%s", app.Domains.CustomApplicationLoginPageURL, app.Client.ClientID), http.StatusFound)
-				return
-			}
-			// If tenant domain is not resolved or defaulted, redirect to application login endpoint
-			http.Redirect(res, req, fmt.Sprintf(`https://%s/login?client_id=%s`, app.Domains.WristbandDomain, app.Client.ClientID), http.StatusFound)
-			return
-		}
-
 		// Build authorization URL
-		authURL, err := app.HandleLogin(httpCtx, app.CallbackURL, options)
+		authURL, err := app.HandleLogin(httpCtx, options)
 		if err != nil {
 			http.Error(res, err.Error(), http.StatusInternalServerError)
 			return
@@ -150,6 +143,9 @@ func (app WristbandApp) CallbackHandler() http.HandlerFunc {
 		// Create session
 		callbackContext, err := app.HandleCallback(ctx, app.CallbackURL)
 		if err != nil {
+			if errors.Is(err, NoLoginStateError) {
+				// TODO Redirect to login
+			}
 			fmt.Println(err.Error())
 			http.Error(res, "Failed to handle callback", http.StatusInternalServerError)
 			return
@@ -189,16 +185,33 @@ func (app WristbandApp) clearAllLoginCookies(ctx HTTPContext) {
 }
 
 // LogoutHandler creates a middleware for logging out users
-func (app WristbandApp) LogoutHandler() http.HandlerFunc {
+func (app WristbandApp) LogoutHandler(opts ...LogoutOption) http.HandlerFunc {
 	return func(res http.ResponseWriter, req *http.Request) {
-		ctx := app.HTTPContext(res, req)
-		url := app.LogoutURL(ctx)
+		ctx := req.Context()
+		httpContext := app.HTTPContext(res, req)
+
 		// Get session from session manager
-		session, err := app.SessionManager.GetSession(req.Context(), req)
+		session, err := app.SessionManager.GetSession(ctx, req)
 		if err != nil {
-			// If no session, just redirect to Wristband logout
-			http.Redirect(res, req, url, http.StatusFound)
-			return
+			if url, err := app.LogoutUrl(httpContext, LogoutConfig{}); err == nil {
+				// If no session, just redirect to Wristband logout
+				http.Redirect(res, req, url, http.StatusFound)
+				return
+			}
+			http.Error(res, err.Error(), http.StatusInternalServerError)
+		}
+
+		logoutCfg := LogoutConfig{
+			TenantName:         session.TenantName,
+			TenantCustomDomain: session.CustomTenantDomain,
+		}
+		for _, opt := range opts {
+			opt.apply(&logoutCfg)
+		}
+
+		url, err := app.LogoutUrl(httpContext, logoutCfg)
+		if err != nil {
+			http.Error(res, err.Error(), http.StatusInternalServerError)
 		}
 
 		// Try to revoke refresh token

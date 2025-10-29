@@ -1,6 +1,7 @@
 package goauth
 
 import (
+	"fmt"
 	"net/url"
 	"slices"
 	"strings"
@@ -22,8 +23,6 @@ type AuthorizeRequest struct {
 	Scopes []string
 	// Client contains the client credentials for the OAuth application.
 	Client ConfidentialClient
-	// Domains contains the application domain configuration.
-	Domains AppDomains
 }
 
 // AuthorizeRequestOption is an interface for options that can be applied to an AuthorizeRequest.
@@ -34,28 +33,29 @@ type AuthorizeRequestOption interface {
 var defaultScopes = []string{"openid", "offline_access", "email"}
 
 // NewAuthorizeRequest builds the authorization request for redirecting to Wristband
-func (auth WristbandAuth) NewAuthorizeRequest(callbackURL, state string, opts ...AuthorizeRequestOption) *AuthorizeRequest {
+func (auth WristbandAuth) NewAuthorizeRequest(state string, opts ...AuthorizeRequestOption) *AuthorizeRequest {
 	req := &AuthorizeRequest{
 		State:        state,
-		RedirectURI:  callbackURL,
-		Scopes:       defaultScopes,
+		RedirectURI:  auth.configResolver.GetRedirectURI(),
+		Scopes:       auth.configResolver.GetScopes(),
 		Client:       auth.Client,
-		Domains:      auth.Domains,
 		CodeVerifier: rand.GenerateRandomString(32),
-		Nonce:        rand.GenerateRandomString(32),
 	}
 
 	for _, opt := range opts {
 		opt.apply(req)
 	}
+	if req.Nonce == "" {
+		req.Nonce = rand.GenerateRandomString(32)
+	}
 	return req
 }
 
 // AuthorizeURL returns the authorization URL for redirecting to Wristband
-func (req AuthorizeRequest) AuthorizeURL(httpCtx HTTPContext) string {
+func (req AuthorizeRequest) AuthorizeURL(httpCtx HTTPContext, baseUrl string) string {
 	queryValues := httpCtx.Query()
 
-	endpoint := req.Domains.TenantedHost(httpCtx) + DefaultAuthorizeEndpoint
+	endpoint := fmt.Sprintf("https://%s/api/v1/%s?%s") + DefaultAuthorizeEndpoint
 	params := url.Values{}
 	params.Set("client_id", req.Client.ClientID)
 	params.Set("redirect_uri", req.RedirectURI)
@@ -73,6 +73,8 @@ func (req AuthorizeRequest) AuthorizeURL(httpCtx HTTPContext) string {
 		params.Set("code_challenge", rand.GenerateCodeChallenge(req.CodeVerifier))
 		params.Set("code_challenge_method", "S256")
 	}
+
+	endpoint := fmt.Sprintf("https://%s/api/v1/%s?%s", baseUrl, DefaultAuthorizeEndpoint, params.Encode())
 
 	return endpoint + "?" + params.Encode()
 }
