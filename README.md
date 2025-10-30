@@ -169,37 +169,17 @@ There are <ins>three core API endpoints</ins> your Go server should expose to fa
 The goal of the Login Endpoint is to initiate an auth request by redirecting to the [Wristband Authorization Endpoint](https://docs.wristband.dev/reference/authorizev1). It will store any state tied to the auth request in a Login State Cookie, which will later be used by the Callback Endpoint. The frontend of your application should redirect to this endpoint when users need to log in to your application.
 
 ```go
-// Login Endpoint - Route path can be whatever you prefer
-func loginHandler(w http.ResponseWriter, r *http.Request) {
-    // Get the config resolver
-    configResolver := wristbandAuth.GetConfigResolver()
-    if configResolver == nil {
-        http.Error(w, "Config resolver not available", http.StatusInternalServerError)
-        return
-    }
+// Create the Wristband app with your session manager and callback URL
+app := goauth.NewApp(wristbandAuth, goauth.AppInput{
+    CallbackURL:    "https://your-app.com/callback",
+    SessionManager: sessionManager,
+})
 
-    // Get login URL (will fetch from Wristband if auto-configured)
-    loginURL, err := configResolver.GetLoginURL()
-    if err != nil {
-        http.Error(w, "Failed to get login URL", http.StatusInternalServerError)
-        return
-    }
-
-    // Add tenant domain if using subdomains
-    if strings.Contains(loginURL, "{tenant_domain}") {
-        // Extract tenant from subdomain or query parameter
-        tenant := extractTenantFromRequest(r)
-        loginURL = strings.Replace(loginURL, "{tenant_domain}", tenant, 1)
-    }
-
-    http.Redirect(w, r, loginURL, http.StatusFound)
-}
-
-func extractTenantFromRequest(r *http.Request) string {
-    // Implementation depends on your multi-tenant strategy
-    // Could be from subdomain, query parameter, etc.
-    return "default-tenant"
-}
+// Login Endpoint - initiates the auth request and redirects to Wristband
+http.HandleFunc("/login", app.LoginHandler(
+    // Optional: set default tenant behavior for login
+    goauth.WithDefaultTenantName("default-tenant"),
+))
 ```
 
 #### Callback Endpoint
@@ -207,28 +187,8 @@ func extractTenantFromRequest(r *http.Request) string {
 The goal of the Callback Endpoint is to receive incoming calls from Wristband after the user has authenticated and ensure that the Login State cookie contains all auth request state in order to complete the Login Workflow. From there, it will call the [Wristband Token Endpoint](https://docs.wristband.dev/reference/tokenv1) to fetch necessary JWTs, call the [Wristband Userinfo Endpoint](https://docs.wristband.dev/reference/userinfov1) to get the user's data, and create a session for the application containing the JWTs and user data.
 
 ```go
-func callbackHandler(w http.ResponseWriter, r *http.Request) {
-    // Handle the callback
-    session, err := wristbandAuth.HandleCallback(r)
-    if err != nil {
-        http.Error(w, "Authentication failed", http.StatusUnauthorized)
-        return
-    }
-
-    // Store session using your session manager
-    err = sessionManager.StoreSession(r.Context(), w, r, session)
-    if err != nil {
-        http.Error(w, "Failed to store session", http.StatusInternalServerError)
-        return
-    }
-
-    // Redirect to application
-    redirectURL := session.ReturnURL
-    if redirectURL == "" {
-        redirectURL = "/dashboard"
-    }
-    http.Redirect(w, r, redirectURL, http.StatusFound)
-}
+// Callback Endpoint - completes auth and creates the application session
+http.HandleFunc("/callback", app.CallbackHandler())
 ```
 
 #### Logout Endpoint
@@ -236,37 +196,10 @@ func callbackHandler(w http.ResponseWriter, r *http.Request) {
 The goal of the Logout Endpoint is to destroy the application's session that was established during the Callback Endpoint execution. If refresh tokens were requested during the Login Workflow, then a call to the [Wristband Revoke Token Endpoint](https://docs.wristband.dev/reference/revokev1) will occur. It then will redirect to the [Wristband Logout Endpoint](https://docs.wristband.dev/reference/logoutv1) in order to destroy the user's authentication session within the Wristband platform. From there, Wristband will send the user to the Tenant-Level Login Page (unless configured otherwise).
 
 ```go
-func logoutHandler(w http.ResponseWriter, r *http.Request) {
-    // Get current session
-    session, err := sessionManager.GetSession(r.Context(), r)
-    if err != nil {
-        // No session to logout, redirect to home
-        http.Redirect(w, r, "/", http.StatusFound)
-        return
-    }
-
-    // Clear session
-    err = sessionManager.ClearSession(r.Context(), w, r)
-    if err != nil {
-        log.Printf("Failed to clear session: %v", err)
-    }
-
-    // Get config resolver
-    configResolver := wristbandAuth.GetConfigResolver()
-    if configResolver == nil {
-        http.Error(w, "Config resolver not available", http.StatusInternalServerError)
-        return
-    }
-
-    // Get logout URL (will fetch from Wristband if auto-configured)
-    logoutURL, err := configResolver.GetLogoutURL(r)
-    if err != nil {
-        http.Error(w, "Failed to get logout URL", http.StatusInternalServerError)
-        return
-    }
-
-    http.Redirect(w, r, logoutURL, http.StatusFound)
-}
+// Logout Endpoint - revokes refresh token, clears session, redirects to Wristband logout
+http.HandleFunc("/logout", app.LogoutHandler(
+    goauth.WithRedirectURL("/goodbye"),
+))
 ```
 
 <br/>### 4) Guard Your Protected APIs and Handle Token Refresh
@@ -274,50 +207,9 @@ func logoutHandler(w http.ResponseWriter, r *http.Request) {
 Create middleware to protect your APIs and handle token refresh:
 
 ```go
-// Middleware that ensures there is an authenticated user session and JWTs are not expired.
-func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
-    return func(w http.ResponseWriter, r *http.Request) {
-        // Get session from your session manager
-        session, err := sessionManager.GetSession(r.Context(), r)
-        if err != nil || session == nil {
-            http.Error(w, "Unauthorized", http.StatusUnauthorized)
-            return
-        }
-
-        // Check if token is expired and refresh if necessary
-        if session.ExpiresAt.Before(time.Now()) {
-            // Get config resolver
-            configResolver := wristbandAuth.GetConfigResolver()
-            if configResolver != nil {
-                // Refresh token
-                newTokenData, err := wristbandAuth.RefreshToken(session.RefreshToken)
-                if err != nil {
-                    http.Error(w, "Unauthorized", http.StatusUnauthorized)
-                    return
-                }
-
-                // Update session
-                session.AccessToken = newTokenData.AccessToken
-                session.RefreshToken = newTokenData.RefreshToken
-                session.ExpiresAt = time.Now().Add(time.Duration(newTokenData.ExpiresIn) * time.Second)
-
-                // Store updated session
-                err = sessionManager.StoreSession(r.Context(), w, r, session)
-                if err != nil {
-                    http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-                    return
-                }
-            }
-        }
-
-        // Add session to request context
-        ctx := context.WithValue(r.Context(), "session", session)
-        next.ServeHTTP(w, r.WithContext(ctx))
-    }
-}
-
-// Use middleware to protect routes
-http.Handle("/api/protected", authMiddleware(protectedHandler))
+// Use built-in middleware to require auth and auto-refresh access tokens
+protected := app.RequireAuthentication(app.RefreshTokenIfExpired(http.HandlerFunc(protectedHandler)))
+http.Handle("/api/protected", protected)
 ```
 
 ### 5) Pass Your Access Token to Downstream APIs
@@ -326,8 +218,8 @@ If you need to call Wristband APIs or protect your downstream APIs:
 
 ```go
 func apiCallHandler(w http.ResponseWriter, r *http.Request) {
-    // Get session from context
-    session := r.Context().Value("session").(*goauth.Session)
+    // Retrieve session set by RequireAuthentication
+    session := goauth.SessionFromContext(r.Context())
     if session == nil {
         http.Error(w, "Unauthorized", http.StatusUnauthorized)
         return
@@ -427,37 +319,29 @@ The SDK supports both manual configuration and auto-configuration via the Config
 ```go
 // Configure Wristband authentication with auto-configuration enabled
 authConfig := &goauth.AuthConfig{
-    ClientID:                        "your-client-id",
-    ClientSecret:                    "your-client-secret",
+    ClientID:                         "your-client-id",
+    ClientSecret:                     "your-client-secret",
     WristbandApplicationVanityDomain: "your-app.wristband.dev",
-    AutoConfigureEnabled:            true, // Enable auto-configuration
-    Scopes:                         []string{"openid", "offline_access", "email"},
-    TokenExpirationBuffer:          120, // 2 minutes
+    AutoConfigureEnabled:             true, // Enable auto-configuration
+    Scopes:                           []string{"openid", "offline_access", "email"},
+    TokenExpirationBuffer:            120, // 2 minutes
 }
 
-// Create Wristband auth instance
-wristbandAuth, err := authConfig.WristbandAuth()
+// Create Wristband auth instance (with optional custom HTTP client)
+wristbandAuth, err := authConfig.WristbandAuth(
+    goauth.WithHTTPClient(customHTTPClient),
+)
 if err != nil {
     log.Fatal("Failed to create Wristband auth:", err)
 }
-
-// Additional options can be passed to WristbandAuth()
-wristbandAuth, err := authConfig.WristbandAuth(
-    goauth.WithDefaultTenant("tenant-id"),        // Set default tenant
-    goauth.WithLogoutRedirectURL("/goodbye"),     // Custom logout redirect
-    goauth.WithHTTPClient(customHTTPClient),       // Custom HTTP client
-)
 ```
 
 ### Available Options
 
 The `WristbandAuth()` method accepts the following optional parameters:
 
-- **`WithDefaultTenant(tenantDomain string)`**: Sets a default tenant domain for the application
-- **`WithLogoutRedirectURL(url string)`**: Sets the URL users are redirected to after logout
 - **`WithHTTPClient(client *http.Client)`**: Uses a custom HTTP client for API requests
 - **`WithCookieEncryption(cookieEncryption CookieEncryption)`**: Provides a custom cookie encryption implementation
-- **`WithParseTenantFromRootDomain()`**: Enables tenant parsing from the request's host domain
 
 ```go
 if configResolver != nil {
@@ -469,12 +353,8 @@ if configResolver != nil {
         fmt.Printf("Login URL: %s\n", loginURL)
     }
 
-    redirectURI, err := configResolver.GetRedirectURI()
-    if err != nil {
-        log.Printf("Failed to get redirect URI: %v", err)
-    } else {
-        fmt.Printf("Redirect URI: %s\n", redirectURI)
-    }
+    redirectURI := configResolver.GetRedirectURI()
+    fmt.Printf("Redirect URI: %s\n", redirectURI)
 }
 ```
 
