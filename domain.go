@@ -24,30 +24,6 @@ const (
 	DefaultAPIPath = "/api/v1"
 )
 
-type (
-	// AppDomains provides the application domain configuration.
-	AppDomains struct {
-		WristbandDomain string // WristbandApplicationVanityDomain
-		// RootDomain is the root domain for the application.
-		RootDomain string
-		// DefaultDomains provides the default tenant domain configuration.
-		DefaultDomains *TenantDomains
-		// IsApplicationCustomDomainActive indicates if the application is using a custom domain.
-		IsApplicationCustomDomainActive bool
-		// ParseTenantFromRootDomain indicates if the tenant should be parsed from the request.
-		ParseTenantFromRootDomain bool
-		// CustomApplicationLoginPageURL is the URL of the custom login page for the application.
-		CustomApplicationLoginPageURL string
-	}
-
-	// TenantDomains provides the tenant domain configuration.
-	TenantDomains struct {
-		TenantCustomDomain string `json:"tenant_custom_domain"`
-		TenantDomain       string `json:"tenant_domain"`
-		separator          string
-	}
-)
-
 // AuthConfig represents the configuration for Wristband authentication.
 // This struct supports both manual configuration and auto-configuration via the Wristband SDK configuration endpoint.
 type AuthConfig struct {
@@ -162,11 +138,15 @@ const DefaultTokenExpirationBuffer = 60
 
 // SdkConfiguration represents the SDK configuration returned from Wristband's SDK Auto-Configuration Endpoint
 type SdkConfiguration struct {
+	// REQUIRED
+
 	// LoginURL is the URL for initiating the login request
 	LoginURL string `json:"login_url"`
 
 	// RedirectURI is the redirect URI for callback after authentication
 	RedirectURI string `json:"redirect_uri"`
+
+	// OPTIONAL
 
 	// IsApplicationCustomDomainActive indicates whether an application-level custom domain is active
 	IsApplicationCustomDomainActive bool `json:"is_application_custom_domain_active"`

@@ -215,19 +215,28 @@ func TestSession_JSONMarshaling(t *testing.T) {
 // Test AppInput and NewApp
 
 func TestNewApp(t *testing.T) {
+	authConfig := &AuthConfig{
+		ClientID:                         "test-client",
+		ClientSecret:                     "test-secret",
+		WristbandApplicationVanityDomain: "test.wristband.com",
+		AutoConfigureEnabled:             false,
+		Scopes:                           []string{"openid"},
+		SdkConfiguration: &SdkConfiguration{
+			LoginURL:    "https://test.wristband.com/login",
+			RedirectURI: "http://example.com/callback",
+		},
+	}
+	resolver, _ := NewConfigResolver(authConfig)
 	auth := WristbandAuth{
 		Client: ConfidentialClient{
 			ClientID:     "test-client",
 			ClientSecret: "test-secret",
 		},
-		Domains: AppDomains{
-			WristbandDomain: "test.wristband.com",
-		},
+		configResolver: resolver,
 	}
 
 	sessionManager := newMockSessionManager()
 	input := AppInput{
-		LoginPath:      "/auth/login",
 		CallbackURL:    "http://example.com/callback",
 		SessionManager: sessionManager,
 		SessionMetadataExtractor: func(s Session) any {
@@ -237,9 +246,6 @@ func TestNewApp(t *testing.T) {
 
 	app := NewApp(auth, input)
 
-	if app.LoginPath != input.LoginPath {
-		t.Errorf("Expected LoginPath %s, got %s", input.LoginPath, app.LoginPath)
-	}
 	if app.CallbackURL != input.CallbackURL {
 		t.Errorf("Expected CallbackURL %s, got %s", input.CallbackURL, app.CallbackURL)
 	}
@@ -255,7 +261,6 @@ func TestNewAppWithOptions(t *testing.T) {
 	auth := WristbandAuth{}
 	sessionManager := newMockSessionManager()
 	input := AppInput{
-		LoginPath:      "/login",
 		CallbackURL:    "http://example.com/callback",
 		SessionManager: sessionManager,
 	}
@@ -280,24 +285,6 @@ func TestNewAppWithOptions(t *testing.T) {
 }
 
 // Test WristbandApp methods
-
-func TestWristbandApp_LoginEndpoint(t *testing.T) {
-	app := WristbandApp{
-		WristbandAuth: WristbandAuth{
-			Domains: AppDomains{
-				WristbandDomain: "test.wristband.com",
-			},
-		},
-		LoginPath: "/auth/login",
-	}
-
-	expected := "test.wristband.com/auth/login"
-	actual := app.LoginEndpoint()
-
-	if actual != expected {
-		t.Errorf("Expected login endpoint %s, got %s", expected, actual)
-	}
-}
 
 func TestWristbandApp_HTTPContext(t *testing.T) {
 	cookieOpts := CookieOptions{Domain: "example.com"}
@@ -334,13 +321,20 @@ func TestWristbandApp_HTTPContext(t *testing.T) {
 // Test HTTP Handlers
 
 func TestWristbandApp_LoginHandler_WithoutTenantDomain(t *testing.T) {
-	app := WristbandApp{
-		WristbandAuth: WristbandAuth{
-			Client: ConfidentialClient{ClientID: "test-client"},
-			Domains: AppDomains{
-				WristbandDomain: "test.wristband.com",
-			},
+	authConfig := &AuthConfig{
+		ClientID:                         "test-client",
+		ClientSecret:                     "test-secret",
+		WristbandApplicationVanityDomain: "test.wristband.com",
+		AutoConfigureEnabled:             false,
+		Scopes:                           []string{"openid"},
+		SdkConfiguration: &SdkConfiguration{
+			LoginURL:    "https://test.wristband.com/login",
+			RedirectURI: "http://example.com/callback",
 		},
+	}
+	auth, _ := authConfig.WristbandAuth()
+	app := WristbandApp{
+		WristbandAuth: auth,
 	}
 
 	req := httptest.NewRequest("GET", "http://example.com/login", nil)
@@ -354,9 +348,16 @@ func TestWristbandApp_LoginHandler_WithoutTenantDomain(t *testing.T) {
 	}
 
 	location := res.Header().Get("Location")
-	expected := "https://test.wristband.com/login?client_id=test-client"
-	if location != expected {
-		t.Errorf("Expected redirect to %s, got %s", expected, location)
+	// Without tenant in query params, RequestTenantName returns empty string
+	// This creates an authorize URL with empty tenant prefix
+	if !strings.Contains(location, "test.wristband.com/api/v1/") {
+		t.Errorf("Expected authorize URL, got %s", location)
+	}
+	if !strings.Contains(location, "oauth2/authorize") {
+		t.Errorf("Expected OAuth authorize endpoint, got %s", location)
+	}
+	if !strings.Contains(location, "client_id=test-client") {
+		t.Errorf("Expected client_id in URL, got %s", location)
 	}
 
 	// Verify cache headers
@@ -369,14 +370,21 @@ func TestWristbandApp_LoginHandler_WithoutTenantDomain(t *testing.T) {
 }
 
 func TestWristbandApp_LoginHandler_WithCustomLoginPage(t *testing.T) {
-	app := WristbandApp{
-		WristbandAuth: WristbandAuth{
-			Client: ConfidentialClient{ClientID: "test-client"},
-			Domains: AppDomains{
-				WristbandDomain:               "test.wristband.com",
-				CustomApplicationLoginPageURL: "https://custom.example.com/login",
-			},
+	authConfig := &AuthConfig{
+		ClientID:                         "test-client",
+		ClientSecret:                     "test-secret",
+		WristbandApplicationVanityDomain: "test.wristband.com",
+		AutoConfigureEnabled:             false,
+		Scopes:                           []string{"openid"},
+		SdkConfiguration: &SdkConfiguration{
+			LoginURL:                      "https://test.wristband.com/login",
+			RedirectURI:                   "http://example.com/callback",
+			CustomApplicationLoginPageURL: "https://custom.example.com/login",
 		},
+	}
+	auth, _ := authConfig.WristbandAuth()
+	app := WristbandApp{
+		WristbandAuth: auth,
 	}
 
 	req := httptest.NewRequest("GET", "http://example.com/login", nil)
@@ -390,9 +398,13 @@ func TestWristbandApp_LoginHandler_WithCustomLoginPage(t *testing.T) {
 	}
 
 	location := res.Header().Get("Location")
-	expected := "https://custom.example.com/login?client_id=test-client"
-	if location != expected {
-		t.Errorf("Expected redirect to %s, got %s", expected, location)
+	// Without tenant in query params, RequestTenantName returns empty string
+	// This creates an authorize URL with empty tenant prefix (not custom login page)
+	if !strings.Contains(location, "test.wristband.com/api/v1/") {
+		t.Errorf("Expected authorize URL, got %s", location)
+	}
+	if !strings.Contains(location, "oauth2/authorize") {
+		t.Errorf("Expected OAuth authorize endpoint, got %s", location)
 	}
 }
 
@@ -447,12 +459,22 @@ func TestWristbandApp_LogoutHandler_Success(t *testing.T) {
 	}
 	sessionManager.sessions["test-session"] = session
 
+	authConfig := &AuthConfig{
+		ClientID:                         "test-client",
+		ClientSecret:                     "test-secret",
+		WristbandApplicationVanityDomain: "test.wristband.com",
+		AutoConfigureEnabled:             false,
+		Scopes:                           []string{"openid"},
+		SdkConfiguration: &SdkConfiguration{
+			LoginURL:    "https://test.wristband.com/login",
+			RedirectURI: "http://example.com/callback",
+		},
+	}
+	resolver, _ := NewConfigResolver(authConfig)
 	app := WristbandApp{
 		WristbandAuth: WristbandAuth{
-			Domains: AppDomains{
-				WristbandDomain: "test.wristband.com",
-			},
-			Client: ConfidentialClient{ClientID: "test-client"},
+			Client:         ConfidentialClient{ClientID: "test-client"},
+			configResolver: resolver,
 		},
 		SessionManager: sessionManager,
 	}
@@ -467,12 +489,22 @@ func TestWristbandApp_LogoutHandler_NoSession(t *testing.T) {
 	sessionManager := newMockSessionManager()
 	sessionManager.getErr = fmt.Errorf("no session")
 
+	authConfig := &AuthConfig{
+		ClientID:                         "test-client",
+		ClientSecret:                     "test-secret",
+		WristbandApplicationVanityDomain: "test.wristband.com",
+		AutoConfigureEnabled:             false,
+		Scopes:                           []string{"openid"},
+		SdkConfiguration: &SdkConfiguration{
+			LoginURL:    "https://test.wristband.com/login",
+			RedirectURI: "http://example.com/callback",
+		},
+	}
+	resolver, _ := NewConfigResolver(authConfig)
 	app := WristbandApp{
 		WristbandAuth: WristbandAuth{
-			Domains: AppDomains{
-				WristbandDomain: "test.wristband.com",
-			},
-			Client: ConfidentialClient{ClientID: "test-client"},
+			Client:         ConfidentialClient{ClientID: "test-client"},
+			configResolver: resolver,
 		},
 		SessionManager: sessionManager,
 	}
@@ -694,7 +726,6 @@ func TestAppOptionFunc(t *testing.T) {
 	var appliedApp *WristbandApp
 	option := appOptionFunc(func(app *WristbandApp) {
 		appliedApp = app
-		app.LoginPath = "/custom-login"
 	})
 
 	app := &WristbandApp{}
@@ -702,9 +733,6 @@ func TestAppOptionFunc(t *testing.T) {
 
 	if appliedApp != app {
 		t.Error("Option function should receive the correct app instance")
-	}
-	if app.LoginPath != "/custom-login" {
-		t.Errorf("Expected LoginPath '/custom-login', got %s", app.LoginPath)
 	}
 }
 

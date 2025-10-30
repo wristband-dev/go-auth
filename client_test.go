@@ -22,8 +22,8 @@ func TestNewConfidentialClient(t *testing.T) {
 
 func TestConfidentialClientSetRequestAuth(t *testing.T) {
 	client := &ConfidentialClient{
-		ClientID:     "test-client-id",
-		ClientSecret: "test-client-secret",
+		ClientID:                         "test-client-id",
+		ClientSecret:                     "test-client-secret",
 		WristbandApplicationVanityDomain: "test-wristband-application-vanity-domain",
 	}
 
@@ -93,7 +93,7 @@ func TestConfidentialClientJSON(t *testing.T) {
 	}
 
 	// Verify the JSON structure
-	expectedJSON := `{"client_id":"test-client-id","client_secret":"test-client-secret"}`
+	expectedJSON := `{"client_id":"test-client-id","client_secret":"test-client-secret","wristband_application_vanity_domain":""}`
 	if string(data) != expectedJSON {
 		t.Errorf("Expected JSON '%s', got '%s'", expectedJSON, string(data))
 	}

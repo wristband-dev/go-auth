@@ -44,7 +44,6 @@ type (
 
 // AppInput is the input structure for configuring the WristbandApp.
 type AppInput struct {
-	LoginPath                string
 	CallbackURL              string
 	SessionManager           SessionManager
 	SessionMetadataExtractor func(Session) any
@@ -54,7 +53,6 @@ type AppInput struct {
 func NewApp(auth WristbandAuth, input AppInput, opts ...AppOption) WristbandApp {
 	app := &WristbandApp{
 		WristbandAuth:            auth,
-		LoginPath:                input.LoginPath,
 		CallbackURL:              input.CallbackURL,
 		SessionManager:           input.SessionManager,
 		sessionMetadataExtractor: input.SessionMetadataExtractor,
@@ -91,16 +89,10 @@ func (f appOptionFunc) apply(c *WristbandApp) {
 // WristbandApp extends the WristbandAuth with additional standard library http.Handler functionality.
 type WristbandApp struct {
 	WristbandAuth
-	LoginPath                string
 	CallbackURL              string
 	SessionManager           SessionManager
 	cookieOpts               CookieOptions
 	sessionMetadataExtractor func(Session) any
-}
-
-// LoginEndpoint returns the full URL for the login endpoint.
-func (app WristbandApp) LoginEndpoint() string {
-	return app.configResolver.WristbandApplicationVanityDomain + app.LoginPath
 }
 
 // HTTPContext creates a new HTTPContext for the standard library request and response.

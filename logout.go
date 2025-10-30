@@ -23,12 +23,14 @@ func (f LogoutOptionFunc) apply(options *LogoutConfig) {
 	f(options)
 }
 
+// WithRedirectURL sets the redirect URL used for the logout flow
 func WithRedirectURL(redirectURL string) LogoutOption {
 	return LogoutOptionFunc(func(config *LogoutConfig) {
 		config.RedirectURL = redirectURL
 	})
 }
 
+// WithState is used to set the state query parameter in the logout
 func WithState(state string) LogoutOption {
 	return LogoutOptionFunc(func(config *LogoutConfig) {
 		config.State = state
@@ -83,7 +85,7 @@ func (auth WristbandAuth) logoutHost(req HTTPRequest, options LogoutConfig) (str
 	if customTenantName, ok := auth.RequestCustomTenantName(req); ok {
 		return customTenantName, nil
 	}
-	if tenantName, err := auth.RequestTenantName(req); err == nil {
+	if tenantName, err := auth.RequestTenantName(req); err == nil && tenantName != "" {
 		return strings.Join([]string{tenantName, auth.configResolver.WristbandApplicationVanityDomain}, auth.separator()), nil
 	} else {
 		// TODO Log

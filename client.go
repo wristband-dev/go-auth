@@ -15,18 +15,18 @@ const AttemptDelayMs = 100
 // NewConfidentialClient creates a new ConfidentialClient with the provided client ID and secret.
 func NewConfidentialClient(clientID, clientSecret, wristbandApplicationVanityDomain string) ConfidentialClient {
 	return ConfidentialClient{
-		ClientID:     clientID,
-		ClientSecret: clientSecret,
+		ClientID:                         clientID,
+		ClientSecret:                     clientSecret,
 		WristbandApplicationVanityDomain: wristbandApplicationVanityDomain,
-		httpClient: http.DefaultClient,
+		httpClient:                       http.DefaultClient,
 	}
 }
 
 // ConfidentialClient represents a confidential client with client ID and secret.
 type ConfidentialClient struct {
-	httpClient *http.Client
-	ClientID     string `json:"client_id"`
-	ClientSecret string `json:"client_secret"`
+	httpClient                       *http.Client
+	ClientID                         string `json:"client_id"`
+	ClientSecret                     string `json:"client_secret"`
 	WristbandApplicationVanityDomain string `json:"wristband_application_vanity_domain"`
 }
 
@@ -79,4 +79,3 @@ func (c *ConfidentialClient) GetSdkConfiguration() (*SdkConfiguration, error) {
 
 	return sdkConfig, nil
 }
-

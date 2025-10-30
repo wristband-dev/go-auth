@@ -142,20 +142,23 @@ func (auth WristbandAuth) loginBaseUrl(req HTTPContext, options *LoginOptions) (
 	if customTenantDomain, ok := auth.RequestCustomTenantName(req); ok {
 		return customTenantDomain, nil
 	}
-	if tenantName, err := auth.RequestTenantName(req); err == nil {
+	if tenantName, err := auth.RequestTenantName(req); err == nil && tenantName != "" {
 		return strings.Join([]string{tenantName, auth.configResolver.WristbandApplicationVanityDomain}, auth.separator()), nil
 	} else {
 		// TODO Log
 	}
 
-	if !options.hasTenantDefault() {
+	if options == nil {
 		return "", NoTenantNameError
 	}
 
 	if options.DefaultTenantCustomDomain != "" {
 		return options.DefaultTenantCustomDomain, nil
 	}
-	return strings.Join([]string{options.DefaultTenantName, auth.configResolver.WristbandApplicationVanityDomain}, auth.separator()), nil
+	if options.DefaultTenantName != "" {
+		return strings.Join([]string{options.DefaultTenantName, auth.configResolver.WristbandApplicationVanityDomain}, auth.separator()), nil
+	}
+	return "", NoTenantNameError
 }
 
 // cleanupOldLoginCookies removes all but the 2 most recent login state cookies.

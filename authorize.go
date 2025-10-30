@@ -2,6 +2,7 @@ package goauth
 
 import (
 	"fmt"
+	"log"
 	"net/url"
 	"slices"
 	"strings"
@@ -55,7 +56,6 @@ func (auth WristbandAuth) NewAuthorizeRequest(state string, opts ...AuthorizeReq
 func (req AuthorizeRequest) AuthorizeURL(httpCtx HTTPContext, baseUrl string) string {
 	queryValues := httpCtx.Query()
 
-	endpoint := fmt.Sprintf("https://%s/api/v1/%s?%s") + DefaultAuthorizeEndpoint
 	params := url.Values{}
 	params.Set("client_id", req.Client.ClientID)
 	params.Set("redirect_uri", req.RedirectURI)
@@ -74,9 +74,10 @@ func (req AuthorizeRequest) AuthorizeURL(httpCtx HTTPContext, baseUrl string) st
 		params.Set("code_challenge_method", "S256")
 	}
 
-	endpoint := fmt.Sprintf("https://%s/api/v1/%s?%s", baseUrl, DefaultAuthorizeEndpoint, params.Encode())
+	endpoint := fmt.Sprintf("https://%s/api/v1%s?%s", baseUrl, DefaultAuthorizeEndpoint, params.Encode())
+	log.Printf("Authorize URL: %s\n", endpoint)
 
-	return endpoint + "?" + params.Encode()
+	return endpoint
 }
 
 // WithScopes sets the scopes for an AuthorizeRequest.

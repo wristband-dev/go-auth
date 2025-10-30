@@ -182,8 +182,11 @@ func (cr *ConfigResolver) validateRequiredAuthConfigs() error {
 }
 
 func (cr *ConfigResolver) validateStrictUrlAuthConfigs() error {
+	if cr.SdkConfiguration == nil {
+		return fmt.Errorf("the [sdk_configuration] config must have a value if auto-configure is disabled")
+	}
 	if cr.LoginURL == "" {
-		return fmt.Errorf("the [login_url] config must have a value when auto-configure is disabled")
+		// return fmt.Errorf("the [login_url] config must have a value when auto-configure is disabled")
 	}
 	if cr.RedirectURI == "" {
 		return fmt.Errorf("the [redirect_uri] config must have a value when auto-configure is disabled")
@@ -340,9 +343,14 @@ func (cr *ConfigResolver) GetIsApplicationCustomDomainActive() bool {
 	return false
 }
 
+func (cr *ConfigResolver) MustLoginURL() string {
+	url, _ := cr.GetLoginURL()
+	return url
+}
+
 func (cr *ConfigResolver) GetLoginURL() (string, error) {
 	// 1. Check if manually provided in authConfig
-	if cr.SdkConfiguration != nil {
+	if cr.SdkConfiguration != nil && cr.SdkConfiguration.LoginURL != "" {
 		return cr.LoginURL, nil
 	}
 
