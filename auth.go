@@ -14,10 +14,13 @@ func (ac *AuthConfig) WristbandAuth(opts ...AuthOption) (WristbandAuth, error) {
 	if err != nil {
 		return WristbandAuth{}, err
 	}
+	if err := resolver.PreloadSdkConfig(); err != nil {
+		return WristbandAuth{}, err
+	}
 
 	// Initialize WristbandAuth with all required fields
 	auth := WristbandAuth{
-		Client:           ac.Client(),
+		Client:           resolver.wristbandApi,
 		tokenEndpoint:    DefaultTokenEndpoint,
 		userInfoEndpoint: DefaultUserInfoEndpoint,
 		revokeEndpoint:   DefaultRevokeEndpoint,

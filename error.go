@@ -1,6 +1,7 @@
 package goauth
 
 import (
+	"errors"
 	"fmt"
 )
 
@@ -19,6 +20,13 @@ type WristbandError struct {
 
 func (e WristbandError) Error() string {
 	return fmt.Sprintf("%s: %s", e.Code, e.Message)
+}
+
+func NewWristbandError(error, description string) error {
+	return WristbandError{
+		Message: description,
+		Code:    error,
+	}
 }
 
 // InvalidCallbackQueryParameterError creates an InvalidCallbackError for an invalid query parameter.
@@ -50,4 +58,24 @@ func RequestError(queryValues QueryValueResolver) error {
 		Message: queryValues.Get("error_description"),
 		Code:    queryValues.Get("error"),
 	}
+}
+
+type RedirectError struct {
+	Message string
+	Url     string
+}
+
+func (e RedirectError) Error() string {
+	return fmt.Sprintf("%s", e.Message)
+}
+
+func NewRedirectError(error, url string) error {
+	return RedirectError{
+		Message: error,
+		Url:     url,
+	}
+}
+
+func IsRedirectError(err error) bool {
+	return errors.As(err, &RedirectError{})
 }

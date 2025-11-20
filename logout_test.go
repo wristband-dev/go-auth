@@ -262,56 +262,6 @@ func TestWristbandAuth_LogoutURL_MinimalParameters(t *testing.T) {
 	}
 }
 
-func TestWristbandAuth_LogoutURL_EmptyClientID(t *testing.T) {
-	// Skip this test as empty ClientID is now validated and would fail
-	// This test can no longer run as ConfigResolver requires non-empty ClientID
-	t.Skip("Empty ClientID is now validated by ConfigResolver and cannot be tested this way")
-
-	authConfig := &AuthConfig{
-		ClientID:                         "test-client-id", // Changed to valid ID for validation
-		ClientSecret:                     "test-secret",
-		WristbandApplicationVanityDomain: "test.wristband.com",
-		AutoConfigureEnabled:             false,
-		Scopes:                           []string{"openid"},
-		SdkConfiguration: &SdkConfiguration{
-			LoginURL:    "https://test.wristband.com/login",
-			RedirectURI: "http://example.com/callback",
-		},
-	}
-	resolver, _ := NewConfigResolver(authConfig)
-	auth := WristbandAuth{
-		Client:         ConfidentialClient{ClientID: ""}, // Test with empty after resolver is created
-		configResolver: resolver,
-	}
-
-	req := newMockHTTPRequest()
-	req.queryValues.Set("tenant_domain", "tenant1")
-
-	logoutConfig := LogoutConfig{
-		TenantName: "tenant1",
-	}
-
-	logoutURL, err := auth.LogoutUrl(req, logoutConfig)
-	if err != nil {
-		t.Fatalf("Failed to generate logout URL: %v", err)
-	}
-
-	// Parse the URL to verify components
-	parsedURL, err := url.Parse(logoutURL)
-	if err != nil {
-		t.Fatalf("Failed to parse logout URL: %v", err)
-	}
-
-	// Verify empty client_id is still included
-	query := parsedURL.Query()
-	if !query.Has("client_id") {
-		t.Error("Expected client_id parameter to be present")
-	}
-	if query.Get("client_id") != "" {
-		t.Errorf("Expected empty client_id, got %s", query.Get("client_id"))
-	}
-}
-
 func TestWristbandAuth_LogoutURL_SpecialCharactersInParameters(t *testing.T) {
 	authConfig := &AuthConfig{
 		ClientID:                         "test-client@special",
@@ -566,8 +516,8 @@ func TestWristbandAuth_LogoutURL_EmptyTenantDomain(t *testing.T) {
 	}
 
 	// With empty tenant domain, it should still create a tenanted host with empty tenant
-	// This results in "-test.wristband.com"
-	expected := "https://-test.wristband.com/api/v1/logout?client_id=test-client-id"
+	// This results in "test.wristband.com"
+	expected := "https://test.wristband.com/api/v1/logout?client_id=test-client-id"
 	if logoutURL != expected {
 		t.Errorf("Expected logout URL %s, got %s", expected, logoutURL)
 	}
@@ -662,43 +612,6 @@ func TestWristbandAuth_LogoutURL_LongParameters(t *testing.T) {
 }
 
 // Test edge cases and error conditions
-
-func TestWristbandAuth_LogoutURL_EmptyWristbandDomain(t *testing.T) {
-	// Skip this test as empty WristbandApplicationVanityDomain is now validated and would fail
-	t.Skip("Empty WristbandApplicationVanityDomain is now validated by ConfigResolver")
-
-	authConfig := &AuthConfig{
-		ClientID:                         "test-client-id",
-		ClientSecret:                     "test-secret",
-		WristbandApplicationVanityDomain: "test.wristband.com", // Changed to valid domain for validation
-		AutoConfigureEnabled:             false,
-		Scopes:                           []string{"openid"},
-		SdkConfiguration: &SdkConfiguration{
-			LoginURL:    "https:///login",
-			RedirectURI: "http://example.com/callback",
-		},
-	}
-	resolver, _ := NewConfigResolver(authConfig)
-	auth := WristbandAuth{
-		Client:         ConfidentialClient{ClientID: "test-client-id"},
-		configResolver: resolver,
-	}
-
-	req := newMockHTTPRequest()
-
-	logoutConfig := LogoutConfig{}
-
-	logoutURL, err := auth.LogoutUrl(req, logoutConfig)
-	if err != nil {
-		t.Fatalf("Failed to generate logout URL: %v", err)
-	}
-
-	// Should still work but result in malformed URL
-	expected := "https:///login?client_id=test-client-id"
-	if logoutURL != expected {
-		t.Errorf("Expected logout URL %s, got %s", expected, logoutURL)
-	}
-}
 
 func TestWristbandAuth_LogoutURL_DefaultLogoutEndpoint(t *testing.T) {
 	authConfig := &AuthConfig{

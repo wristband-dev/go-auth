@@ -211,7 +211,7 @@ func (cr *ConfigResolver) validateTenantDomainTokens() error {
 		} else {
 			return fmt.Errorf("the [redirect_uri] must contain the \"%s\" token when using the [parse_tenant_from_root_domain] config", TenantDomainToken)
 		}
-	} else {
+	} else if cr.SdkConfiguration != nil {
 		if strings.Contains(cr.LoginURL, TenantDomainToken) {
 			return fmt.Errorf("the [login_url] cannot contain the \"%s\" token when the [parse_tenant_from_root_domain] is absent", TenantDomainToken)
 		}
@@ -232,12 +232,15 @@ func (cr *ConfigResolver) validateAllDynamicConfigs(sdkConfig *SdkConfiguration)
 	}
 
 	// Use manual config values if provided, otherwise use SDK config values
-	loginURL := cr.LoginURL
+	loginURL := ""
+	redirectURI := ""
+	if cr.SdkConfiguration != nil {
+		loginURL = cr.SdkConfiguration.LoginURL
+		redirectURI = cr.SdkConfiguration.RedirectURI
+	}
 	if loginURL == "" {
 		loginURL = sdkConfig.LoginURL
 	}
-
-	redirectURI := cr.RedirectURI
 	if redirectURI == "" {
 		redirectURI = sdkConfig.RedirectURI
 	}

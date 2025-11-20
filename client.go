@@ -37,16 +37,15 @@ func (c *ConfidentialClient) SetRequestAuth(httpReq *http.Request) {
 
 // GetSdkConfiguration fetches the SDK configuration from Wristband's auto-configuration endpoint
 func (c *ConfidentialClient) GetSdkConfiguration() (*SdkConfiguration, error) {
-	endpoint := fmt.Sprintf("https://%s/api/v1/sdk-configuration", c.WristbandApplicationVanityDomain)
+	endpoint := fmt.Sprintf("https://%s/api/v1/clients/%s/sdk-configuration", c.WristbandApplicationVanityDomain, c.ClientID)
 
 	req, err := http.NewRequest("GET", endpoint, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	req.SetBasicAuth(c.ClientID, c.ClientSecret)
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Accept", "application/json;charset=UTF-8")
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {

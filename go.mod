@@ -1,3 +1,3 @@
 module github.com/wristband-dev/go-auth
 
-go 1.24.3
+go 1.23.12

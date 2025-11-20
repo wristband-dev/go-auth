@@ -244,17 +244,38 @@ var NoLoginStateError = errors.New("no login state found")
 
 // HandleCallback processes the OAuth callback, exchanges the authorization code for tokens.
 func (auth WristbandAuth) HandleCallback(httpCtx HTTPContext, callbackURL string) (*CallbackContext, error) {
-	queryValues := httpCtx.Query()
-	if err := RequestError(queryValues); err != nil {
+	if err := RequestError(httpCtx.Query()); err != nil {
 		return nil, err
 	}
 	inputs := auth.getCallbackInputs(httpCtx)
 	if inputs.Code == "" {
 		return nil, InvalidParameterError("code")
 	}
-	loginState, err := GetLoginStateCookie(auth.cookieEncryption, httpCtx)
+	if inputs.TenantName == "" {
+		if auth.configResolver.GetParseTenantFromRootDomain() != "callback request URL is missing a tenant subdomain" {
+			return nil, NewWristbandError("missing_tenant_subdomain", "")
+		}
+		return nil, NewWristbandError("missing_tenant_domain", "callback request is missing the [tenant_domain] query parameter from Wristband")
+	}
+	loginUrl, err := auth.configResolver.GetLoginURL()
 	if err != nil {
 		return nil, err
+	}
+	queryVals := url.Values{}
+	if auth.configResolver.GetParseTenantFromRootDomain() != "" {
+		loginUrl = strings.ReplaceAll(loginUrl, TenantDomainToken, inputs.TenantName)
+	} else {
+		queryVals.Set("tenant_domain", inputs.TenantName)
+	}
+	if inputs.TenantCustomDomain != "" {
+		queryVals.Set("tenant_custom_domain", inputs.TenantCustomDomain)
+	}
+	tenantUrl := loginUrl + "?" + queryVals.Encode()
+
+	loginState, err := GetLoginStateCookie(auth.cookieEncryption, httpCtx)
+	if err != nil {
+		// If
+		return nil, NewRedirectError("failed to retrieve login state", tenantUrl)
 	}
 
 	tokenReq := auth.CodeTokenRequest(inputs.Code, loginState.CodeVerifier, callbackURL)

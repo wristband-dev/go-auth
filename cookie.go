@@ -35,7 +35,7 @@ type (
 
 const (
 	// LoginStateCookiePrefix is the prefix used for the name of the cookie used to store the login metadata.
-	LoginStateCookiePrefix = "wb-login#"
+	LoginStateCookiePrefix = "login#"
 )
 
 // Cookie handling functions

@@ -2,6 +2,7 @@ package goauth
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 
@@ -73,7 +74,7 @@ type AuthConfig struct {
 	*SdkConfiguration
 }
 
-func NewAutoConfigureAuthConfig(clientID, clientSecret, wristbandDomain string, opts ...AuthConfigOption) *AuthConfig {
+func NewAuthConfig(clientID, clientSecret, wristbandDomain string, opts ...AuthConfigOption) *AuthConfig {
 	ac := &AuthConfig{
 		AutoConfigureEnabled:             true,
 		ClientID:                         clientID,
@@ -96,19 +97,88 @@ type AuthConfigOption interface {
 	apply(*AuthConfig)
 }
 
+// RoundTripperFunc is a function that implements the http.RoundTripper interface.
+type RoundTripperFunc func(*http.Request) (*http.Response, error)
+
+// RoundTrip implements the http.RoundTripper interface.
+func (fn RoundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return fn(req)
+}
+
 type authConfigOptionFunc func(*AuthConfig)
 
 func (f authConfigOptionFunc) apply(c *AuthConfig) { f(c) }
 
+// WithAutoConfigureDisabled disables the auto-configure.
+func WithAutoConfigureDisabled(loginUrl, redirectURI string) AuthConfigOption {
+	return authConfigOptionFunc(func(c *AuthConfig) {
+		c.AutoConfigureEnabled = false
+		if c.SdkConfiguration == nil {
+			c.SdkConfiguration = &SdkConfiguration{}
+		}
+		c.SdkConfiguration.LoginURL = loginUrl
+		c.SdkConfiguration.RedirectURI = redirectURI
+	})
+}
+
+// WithAutoConfigurableConfigs is used to provide static values for auto-configure.
+func WithAutoConfigurableConfigs(configuration SdkConfiguration) AuthConfigOption {
+	return authConfigOptionFunc(func(c *AuthConfig) {
+		c.SdkConfiguration = &configuration
+	})
+}
+
+// WithParseTenantFromRootDomain sets the ParseTenantFromRootDomain field.
+func WithParseTenantFromRootDomain(rootDomain string) AuthConfigOption {
+	return authConfigOptionFunc(func(c *AuthConfig) {
+		c.ParseTenantFromRootDomain = rootDomain
+	})
+}
+
+// WithLoginStateSecret sets the LoginStateSecret field.
+func WithLoginStateSecret(secret string) AuthConfigOption {
+	return authConfigOptionFunc(func(c *AuthConfig) {
+		c.LoginStateSecret = secret
+	})
+}
+
+// WithTokenExpirationBuffer sets the TokenExpirationBuffer field.
+func WithTokenExpirationBuffer(buffer int) AuthConfigOption {
+	return authConfigOptionFunc(func(c *AuthConfig) {
+		c.TokenExpirationBuffer = buffer
+	})
+}
+
+// WithConfigScopes sets the Scopes field.
+func WithConfigScopes(scopes []string) AuthConfigOption {
+	return authConfigOptionFunc(func(c *AuthConfig) {
+		c.Scopes = scopes
+	})
+}
+
+// Client returns a new ConfidentialClient instance using the provided AuthConfig.
 func (ac *AuthConfig) Client() ConfidentialClient {
+	httpClient := &http.Client{
+		Transport: RoundTripperFunc(func(req *http.Request) (*http.Response, error) {
+			log.Printf("URL: %s\n", req.URL.String())
+			resp, err := http.DefaultTransport.RoundTrip(req)
+			if err != nil {
+				log.Printf("Error: %v\n", err)
+			} else if resp.StatusCode != 200 {
+				log.Printf("Invalid status code: %v\n", resp.Status)
+			}
+			return resp, nil
+		}),
+	}
 	return ConfidentialClient{
 		ClientID:                         ac.ClientID,
-		httpClient:                       http.DefaultClient,
+		httpClient:                       httpClient,
 		ClientSecret:                     ac.ClientSecret,
 		WristbandApplicationVanityDomain: ac.WristbandApplicationVanityDomain,
 	}
 }
 
+// RequestTenantName returns the tenant name from the request.
 func (auth WristbandAuth) RequestTenantName(req HTTPRequest) (string, error) {
 	if parseTenantName := auth.configResolver.GetParseTenantFromRootDomain(); parseTenantName != "" {
 		if !strings.HasSuffix(req.Host(), parseTenantName) {
@@ -119,6 +189,7 @@ func (auth WristbandAuth) RequestTenantName(req HTTPRequest) (string, error) {
 	return req.Query().Get("tenant_domain"), nil
 }
 
+// RequestCustomTenantName returns the custom tenant name from the request.
 func (auth WristbandAuth) RequestCustomTenantName(req HTTPRequest) (string, bool) {
 	return req.Query().Get("tenant_custom_domain"), req.Query().Has("tenant_custom_domain")
 }
