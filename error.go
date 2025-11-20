@@ -18,14 +18,16 @@ type WristbandError struct {
 	Code    string
 }
 
+// Error implements the error interface.
 func (e WristbandError) Error() string {
 	return fmt.Sprintf("%s: %s", e.Code, e.Message)
 }
 
-func NewWristbandError(error, description string) error {
+// NewWristbandError creates a new WristbandError.
+func NewWristbandError(err, description string) error {
 	return WristbandError{
 		Message: description,
-		Code:    error,
+		Code:    err,
 	}
 }
 
@@ -50,7 +52,7 @@ func RequestError(queryValues QueryValueResolver) error {
 	if queryValues == nil {
 		return nil
 	}
-	if !(queryValues.Has("error") && queryValues.Has("error_description")) {
+	if !queryValues.Has("error") && !queryValues.Has("error_description") {
 		return nil
 	}
 
@@ -60,22 +62,29 @@ func RequestError(queryValues QueryValueResolver) error {
 	}
 }
 
+// RedirectError represents an error that requires a redirect.
 type RedirectError struct {
 	Message string
-	Url     string
+	URL     string
 }
 
 func (e RedirectError) Error() string {
-	return fmt.Sprintf("%s", e.Message)
+	return e.Message
 }
 
-func NewRedirectError(error, url string) error {
+// NewRedirectError creates a new RedirectError.
+func NewRedirectError(err, url string) error {
 	return RedirectError{
-		Message: error,
-		Url:     url,
+		Message: err,
+		URL:     url,
 	}
 }
 
-func IsRedirectError(err error) bool {
-	return errors.As(err, &RedirectError{})
+// IsRedirectError checks if the error is a RedirectError.
+func IsRedirectError(err error) (*RedirectError, bool) {
+	var redirectError *RedirectError
+	if errors.As(err, &redirectError) {
+		return redirectError, true
+	}
+	return nil, false
 }

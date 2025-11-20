@@ -74,6 +74,7 @@ type AuthConfig struct {
 	*SdkConfiguration
 }
 
+// NewAuthConfig creates a new AuthConfig.
 func NewAuthConfig(clientID, clientSecret, wristbandDomain string, opts ...AuthConfigOption) *AuthConfig {
 	ac := &AuthConfig{
 		AutoConfigureEnabled:             true,
@@ -93,6 +94,7 @@ func NewAuthConfig(clientID, clientSecret, wristbandDomain string, opts ...AuthC
 	return ac
 }
 
+// AuthConfigOption is an option for the AuthConfig
 type AuthConfigOption interface {
 	apply(*AuthConfig)
 }
@@ -110,14 +112,14 @@ type authConfigOptionFunc func(*AuthConfig)
 func (f authConfigOptionFunc) apply(c *AuthConfig) { f(c) }
 
 // WithAutoConfigureDisabled disables the auto-configure.
-func WithAutoConfigureDisabled(loginUrl, redirectURI string) AuthConfigOption {
+func WithAutoConfigureDisabled(loginURL, redirectURI string) AuthConfigOption {
 	return authConfigOptionFunc(func(c *AuthConfig) {
 		c.AutoConfigureEnabled = false
 		if c.SdkConfiguration == nil {
 			c.SdkConfiguration = &SdkConfiguration{}
 		}
-		c.SdkConfiguration.LoginURL = loginUrl
-		c.SdkConfiguration.RedirectURI = redirectURI
+		c.LoginURL = loginURL
+		c.RedirectURI = redirectURI
 	})
 }
 

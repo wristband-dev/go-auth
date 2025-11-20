@@ -7,6 +7,7 @@ import (
 	"strings"
 )
 
+// LogoutConfig is the configuration for the logout flow.
 type LogoutConfig struct {
 	RedirectURL        string
 	State              string
@@ -14,9 +15,12 @@ type LogoutConfig struct {
 	TenantName         string
 }
 
+// LogoutOption is an option for the logout flow.
 type LogoutOption interface {
 	apply(*LogoutConfig)
 }
+
+// LogoutOptionFunc is a function that implements the LogoutOption interface.
 type LogoutOptionFunc func(*LogoutConfig)
 
 func (f LogoutOptionFunc) apply(options *LogoutConfig) {
@@ -37,8 +41,8 @@ func WithState(state string) LogoutOption {
 	})
 }
 
-// LogoutUrl builds the logout URL for redirecting to Wristband
-func (auth WristbandAuth) LogoutUrl(req HTTPRequest, config LogoutConfig) (string, error) {
+// LogoutURL builds the logout URL for redirecting to Wristband
+func (auth WristbandAuth) LogoutURL(req HTTPRequest, config LogoutConfig) (string, error) {
 	if len(config.State) > 512 {
 		return "", fmt.Errorf("the [state] logout config cannot exceed 512 characters")
 	}
@@ -55,7 +59,7 @@ func (auth WristbandAuth) LogoutUrl(req HTTPRequest, config LogoutConfig) (strin
 
 	host, err := auth.logoutHost(req, config)
 	if err != nil {
-		if errors.Is(err, NoTenantNameError) {
+		if errors.Is(err, ErrTenantNameNotFound) {
 			if config.RedirectURL != "" {
 				return config.RedirectURL, nil
 			}
@@ -64,16 +68,16 @@ func (auth WristbandAuth) LogoutUrl(req HTTPRequest, config LogoutConfig) (strin
 					return customLogin, nil
 				}
 				return fmt.Sprintf("https://%s/login?client_id=%s", auth.configResolver.WristbandApplicationVanityDomain, auth.Client.ClientID), nil
-			} else {
-				return "", err
 			}
+			return "", err
 		}
 	}
 
 	return fmt.Sprintf("https://%s/api/v1/logout?%s", host, params.Encode()), nil
 }
 
-var NoTenantNameError = fmt.Errorf("no tenant name resolvable")
+// ErrTenantNameNotFound is returned when no tenant name can be resolved.
+var ErrTenantNameNotFound = fmt.Errorf("no tenant name resolvable")
 
 func (auth WristbandAuth) logoutHost(req HTTPRequest, options LogoutConfig) (string, error) {
 	if options.TenantCustomDomain != "" {
@@ -87,8 +91,6 @@ func (auth WristbandAuth) logoutHost(req HTTPRequest, options LogoutConfig) (str
 	}
 	if tenantName, err := auth.RequestTenantName(req); err == nil && tenantName != "" {
 		return strings.Join([]string{tenantName, auth.configResolver.WristbandApplicationVanityDomain}, auth.separator()), nil
-	} else {
-		// TODO Log
 	}
-	return "", NoTenantNameError
+	return "", ErrTenantNameNotFound
 }

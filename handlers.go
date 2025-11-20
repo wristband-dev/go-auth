@@ -3,7 +3,6 @@ package goauth
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -135,8 +134,8 @@ func (app WristbandApp) CallbackHandler() http.HandlerFunc {
 		// Create session
 		callbackContext, err := app.HandleCallback(ctx, app.CallbackURL)
 		if err != nil {
-			if errors.Is(err, NoLoginStateError) {
-				// TODO Redirect to login
+			if redirectError, ok := err.(*RedirectError); ok {
+				http.Redirect(res, req, redirectError.URL, http.StatusSeeOther)
 			}
 			fmt.Println(err.Error())
 			http.Error(res, "Failed to handle callback", http.StatusInternalServerError)
@@ -185,7 +184,7 @@ func (app WristbandApp) LogoutHandler(opts ...LogoutOption) http.HandlerFunc {
 		// Get session from session manager
 		session, err := app.SessionManager.GetSession(ctx, req)
 		if err != nil {
-			if url, err := app.LogoutUrl(httpContext, LogoutConfig{}); err == nil {
+			if url, err := app.LogoutURL(httpContext, LogoutConfig{}); err == nil {
 				// If no session, just redirect to Wristband logout
 				http.Redirect(res, req, url, http.StatusFound)
 				return
@@ -201,7 +200,7 @@ func (app WristbandApp) LogoutHandler(opts ...LogoutOption) http.HandlerFunc {
 			opt.apply(&logoutCfg)
 		}
 
-		url, err := app.LogoutUrl(httpContext, logoutCfg)
+		url, err := app.LogoutURL(httpContext, logoutCfg)
 		if err != nil {
 			http.Error(res, err.Error(), http.StatusInternalServerError)
 		}

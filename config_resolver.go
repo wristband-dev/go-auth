@@ -14,7 +14,7 @@ const TenantDomainToken = "{tenant_domain}"
 // supporting both manual configuration and auto-configuration via the Wristband SDK configuration endpoint
 type ConfigResolver struct {
 	*AuthConfig
-	wristbandApi    ConfidentialClient
+	wristbandAPI    ConfidentialClient
 	sdkConfigCache  *SdkConfiguration
 	configPromise   chan *SdkConfiguration
 	configMutex     sync.Mutex
@@ -42,10 +42,10 @@ func NewConfigResolver(authConfig *AuthConfig) (*ConfigResolver, error) {
 		return nil, err
 	}
 
-	resolver.wristbandApi = authConfig.Client()
+	resolver.wristbandAPI = authConfig.Client()
 	if authConfig.AutoConfigureEnabled {
 		// Only validate manually provided values when auto-configure is enabled
-		if err := resolver.validatePartialUrlAuthConfigs(); err != nil {
+		if err := resolver.validatePartialURLAuthConfigs(); err != nil {
 			return nil, err
 		}
 		if err := resolver.PreloadSdkConfig(); err != nil {
@@ -53,7 +53,7 @@ func NewConfigResolver(authConfig *AuthConfig) (*ConfigResolver, error) {
 		}
 	} else {
 		// Validate all URL configs if auto-configure is disabled
-		if err := resolver.validateStrictUrlAuthConfigs(); err != nil {
+		if err := resolver.validateStrictURLAuthConfigs(); err != nil {
 			return nil, err
 		}
 	}
@@ -141,7 +141,7 @@ func (cr *ConfigResolver) fetchSdkConfiguration() (*SdkConfiguration, error) {
 	var lastError error
 
 	for attempt := 1; attempt <= MaxFetchAttempts; attempt++ {
-		sdkConfig, err := cr.wristbandApi.GetSdkConfiguration()
+		sdkConfig, err := cr.wristbandAPI.GetSdkConfiguration()
 		if err == nil {
 			if err := cr.validateAllDynamicConfigs(sdkConfig); err != nil {
 				return nil, fmt.Errorf("SDK configuration validation failed: %w", err)
@@ -181,12 +181,12 @@ func (cr *ConfigResolver) validateRequiredAuthConfigs() error {
 	return nil
 }
 
-func (cr *ConfigResolver) validateStrictUrlAuthConfigs() error {
+func (cr *ConfigResolver) validateStrictURLAuthConfigs() error {
 	if cr.SdkConfiguration == nil {
 		return fmt.Errorf("the [sdk_configuration] config must have a value if auto-configure is disabled")
 	}
 	if cr.LoginURL == "" {
-		// return fmt.Errorf("the [login_url] config must have a value when auto-configure is disabled")
+		return fmt.Errorf("the [login_url] config must have a value when auto-configure is disabled")
 	}
 	if cr.RedirectURI == "" {
 		return fmt.Errorf("the [redirect_uri] config must have a value when auto-configure is disabled")
@@ -195,20 +195,16 @@ func (cr *ConfigResolver) validateStrictUrlAuthConfigs() error {
 	return cr.validateTenantDomainTokens()
 }
 
-func (cr *ConfigResolver) validatePartialUrlAuthConfigs() error {
+func (cr *ConfigResolver) validatePartialURLAuthConfigs() error {
 	return cr.validateTenantDomainTokens()
 }
 
 func (cr *ConfigResolver) validateTenantDomainTokens() error {
 	if cr.ParseTenantFromRootDomain != "" {
-		if strings.Contains(cr.LoginURL, TenantDomainToken) {
-			// Valid - token is present when required
-		} else {
+		if !strings.Contains(cr.LoginURL, TenantDomainToken) {
 			return fmt.Errorf("the [login_url] must contain the \"%s\" token when using the [parse_tenant_from_root_domain] config", TenantDomainToken)
 		}
-		if strings.Contains(cr.RedirectURI, TenantDomainToken) {
-			// Valid - token is present when required
-		} else {
+		if !strings.Contains(cr.RedirectURI, TenantDomainToken) {
 			return fmt.Errorf("the [redirect_uri] must contain the \"%s\" token when using the [parse_tenant_from_root_domain] config", TenantDomainToken)
 		}
 	} else if cr.SdkConfiguration != nil {
@@ -235,8 +231,8 @@ func (cr *ConfigResolver) validateAllDynamicConfigs(sdkConfig *SdkConfiguration)
 	loginURL := ""
 	redirectURI := ""
 	if cr.SdkConfiguration != nil {
-		loginURL = cr.SdkConfiguration.LoginURL
-		redirectURI = cr.SdkConfiguration.RedirectURI
+		loginURL = cr.LoginURL
+		redirectURI = cr.RedirectURI
 	}
 	if loginURL == "" {
 		loginURL = sdkConfig.LoginURL
@@ -271,14 +267,18 @@ func (cr *ConfigResolver) validateAllDynamicConfigs(sdkConfig *SdkConfiguration)
 }
 
 // Static configuration getters
+
+// GetClientID returns the client ID.
 func (cr *ConfigResolver) GetClientID() string {
 	return cr.ClientID
 }
 
+// GetClientSecret returns the client secret.
 func (cr *ConfigResolver) GetClientSecret() string {
 	return cr.ClientSecret
 }
 
+// GetLoginStateSecret returns the login state secret.
 func (cr *ConfigResolver) GetLoginStateSecret() string {
 	if cr.LoginStateSecret != "" {
 		return cr.LoginStateSecret
@@ -286,27 +286,34 @@ func (cr *ConfigResolver) GetLoginStateSecret() string {
 	return cr.ClientSecret
 }
 
+// GetWristbandApplicationVanityDomain returns the wristband application vanity domain.
 func (cr *ConfigResolver) GetWristbandApplicationVanityDomain() string {
 	return cr.WristbandApplicationVanityDomain
 }
 
+// GetDangerouslyDisableSecureCookies returns whether dangerously disable secure cookies is enabled.
 func (cr *ConfigResolver) GetDangerouslyDisableSecureCookies() bool {
 	return cr.DangerouslyDisableSecureCookies
 }
 
+// GetScopes returns the scopes.
 func (cr *ConfigResolver) GetScopes() []string {
 	return cr.Scopes
 }
 
+// GetAutoConfigureEnabled returns whether auto-configure is enabled.
 func (cr *ConfigResolver) GetAutoConfigureEnabled() bool {
 	return cr.AutoConfigureEnabled
 }
 
+// GetTokenExpirationBuffer returns the token expiration buffer.
 func (cr *ConfigResolver) GetTokenExpirationBuffer() int {
 	return cr.TokenExpirationBuffer
 }
 
 // Dynamic configuration getters
+
+// GetCustomApplicationLoginPageURL returns the custom application login page URL.
 func (cr *ConfigResolver) GetCustomApplicationLoginPageURL() (string, error) {
 	// 1. Check if manually provided in authConfig
 	if cr.SdkConfiguration != nil {
@@ -326,6 +333,7 @@ func (cr *ConfigResolver) GetCustomApplicationLoginPageURL() (string, error) {
 	return "", nil
 }
 
+// GetIsApplicationCustomDomainActive returns whether the application custom domain is active.
 func (cr *ConfigResolver) GetIsApplicationCustomDomainActive() bool {
 	// 1. Check if manually provided in authConfig
 	if cr.SdkConfiguration != nil {
@@ -346,14 +354,16 @@ func (cr *ConfigResolver) GetIsApplicationCustomDomainActive() bool {
 	return false
 }
 
+// MustLoginURL returns the login URL or panics if not found (should not happen if validated).
 func (cr *ConfigResolver) MustLoginURL() string {
 	url, _ := cr.GetLoginURL()
 	return url
 }
 
+// GetLoginURL returns the login URL.
 func (cr *ConfigResolver) GetLoginURL() (string, error) {
 	// 1. Check if manually provided in authConfig
-	if cr.SdkConfiguration != nil && cr.SdkConfiguration.LoginURL != "" {
+	if cr.SdkConfiguration != nil && cr.LoginURL != "" {
 		return cr.LoginURL, nil
 	}
 
@@ -370,6 +380,7 @@ func (cr *ConfigResolver) GetLoginURL() (string, error) {
 	return "", fmt.Errorf("the [login_url] config must have a value")
 }
 
+// GetParseTenantFromRootDomain returns the parse tenant from root domain config.
 func (cr *ConfigResolver) GetParseTenantFromRootDomain() string {
 	// 1. Check if manually provided in authConfig
 	if cr.ParseTenantFromRootDomain != "" {
@@ -390,6 +401,7 @@ func (cr *ConfigResolver) GetParseTenantFromRootDomain() string {
 	return ""
 }
 
+// GetRedirectURI returns the redirect URI.
 func (cr *ConfigResolver) GetRedirectURI() string {
 	// 1. Check if manually provided in authConfig
 	if cr.SdkConfiguration != nil {
@@ -400,8 +412,6 @@ func (cr *ConfigResolver) GetRedirectURI() string {
 	if cr.GetAutoConfigureEnabled() {
 		if sdkConfig, err := cr.loadSdkConfig(); err == nil {
 			return sdkConfig.RedirectURI
-		} else {
-			// TODO Log
 		}
 	}
 

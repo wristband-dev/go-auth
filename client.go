@@ -57,7 +57,7 @@ func (c *ConfidentialClient) GetSdkConfiguration() (*SdkConfiguration, error) {
 		return nil, fmt.Errorf("API request failed with status %d", resp.StatusCode)
 	}
 
-	var response map[string]interface{}
+	var response map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}

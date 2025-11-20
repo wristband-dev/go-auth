@@ -57,13 +57,6 @@ func WithDefaultTenantName(name string) func(*LoginOptions) {
 	}
 }
 
-func (options *LoginOptions) hasTenantDefault() bool {
-	if options == nil {
-		return false
-	}
-	return options.DefaultTenantCustomDomain != "" || options.DefaultTenantName != ""
-}
-
 // DefaultLoginOptions returns default login options
 func DefaultLoginOptions() *LoginOptions {
 	return &LoginOptions{}
@@ -71,18 +64,16 @@ func DefaultLoginOptions() *LoginOptions {
 
 // HandleLogin initiates the login process by creating a login state and returning the authorization url.
 func (auth WristbandAuth) HandleLogin(httpCtx HTTPContext, options *LoginOptions) (string, error) {
-	baseUrl, err := auth.loginBaseUrl(httpCtx, options)
+	baseURL, err := auth.loginBaseURL(httpCtx, options)
 	if err != nil {
-		if errors.Is(err, NoTenantNameError) {
+		if errors.Is(err, ErrTenantNameNotFound) {
 			params := url.Values{}
 			params.Set("client_id", auth.Client.ClientID)
-			if returnUrl := options.returnUrl(httpCtx); returnUrl != "" {
-				params.Set("state", strconv.Quote(returnUrl))
+			if returnURL := options.returnURL(httpCtx); returnURL != "" {
+				params.Set("state", strconv.Quote(returnURL))
 			}
-			if customUrl, err := auth.configResolver.GetCustomApplicationLoginPageURL(); err == nil && customUrl != "" {
-				return customUrl + "?" + params.Encode(), nil
-			} else if err != nil {
-				// TODO Log
+			if customURL, err := auth.configResolver.GetCustomApplicationLoginPageURL(); err == nil && customURL != "" {
+				return customURL + "?" + params.Encode(), nil
 			}
 			return "https://" + auth.configResolver.GetWristbandApplicationVanityDomain() + "/login?" + params.Encode(), nil
 		}
@@ -122,12 +113,13 @@ func (auth WristbandAuth) HandleLogin(httpCtx HTTPContext, options *LoginOptions
 		opts...,
 	)
 	// Build authorization URL
-	return authReq.AuthorizeURL(httpCtx, baseUrl), nil
+	return authReq.AuthorizeURL(httpCtx, baseURL), nil
 }
 
+// ReturnURLMaxLength is the maximum length of the return URL.
 const ReturnURLMaxLength = 450
 
-func (options *LoginOptions) returnUrl(req HTTPContext) string {
+func (options *LoginOptions) returnURL(req HTTPContext) string {
 	returnURL := req.Query().Get("return_url")
 	if returnURL == "" && options != nil && options.ReturnURL != "" {
 		returnURL = options.ReturnURL
@@ -138,18 +130,16 @@ func (options *LoginOptions) returnUrl(req HTTPContext) string {
 	return returnURL
 }
 
-func (auth WristbandAuth) loginBaseUrl(req HTTPContext, options *LoginOptions) (string, error) {
+func (auth WristbandAuth) loginBaseURL(req HTTPContext, options *LoginOptions) (string, error) {
 	if customTenantDomain, ok := auth.RequestCustomTenantName(req); ok {
 		return customTenantDomain, nil
 	}
 	if tenantName, err := auth.RequestTenantName(req); err == nil && tenantName != "" {
 		return strings.Join([]string{tenantName, auth.configResolver.WristbandApplicationVanityDomain}, auth.separator()), nil
-	} else {
-		// TODO Log
 	}
 
 	if options == nil {
-		return "", NoTenantNameError
+		return "", ErrTenantNameNotFound
 	}
 
 	if options.DefaultTenantCustomDomain != "" {
@@ -158,7 +148,7 @@ func (auth WristbandAuth) loginBaseUrl(req HTTPContext, options *LoginOptions) (
 	if options.DefaultTenantName != "" {
 		return strings.Join([]string{options.DefaultTenantName, auth.configResolver.WristbandApplicationVanityDomain}, auth.separator()), nil
 	}
-	return "", NoTenantNameError
+	return "", ErrTenantNameNotFound
 }
 
 // cleanupOldLoginCookies removes all but the 2 most recent login state cookies.
@@ -240,7 +230,8 @@ type CallbackContext struct {
 	CustomTenantDomain string
 }
 
-var NoLoginStateError = errors.New("no login state found")
+// ErrorNoLoginState is returned when no login state is found.
+var ErrorNoLoginState = errors.New("no login state found")
 
 // HandleCallback processes the OAuth callback, exchanges the authorization code for tokens.
 func (auth WristbandAuth) HandleCallback(httpCtx HTTPContext, callbackURL string) (*CallbackContext, error) {
@@ -257,25 +248,25 @@ func (auth WristbandAuth) HandleCallback(httpCtx HTTPContext, callbackURL string
 		}
 		return nil, NewWristbandError("missing_tenant_domain", "callback request is missing the [tenant_domain] query parameter from Wristband")
 	}
-	loginUrl, err := auth.configResolver.GetLoginURL()
+	loginURL, err := auth.configResolver.GetLoginURL()
 	if err != nil {
 		return nil, err
 	}
 	queryVals := url.Values{}
 	if auth.configResolver.GetParseTenantFromRootDomain() != "" {
-		loginUrl = strings.ReplaceAll(loginUrl, TenantDomainToken, inputs.TenantName)
+		loginURL = strings.ReplaceAll(loginURL, TenantDomainToken, inputs.TenantName)
 	} else {
 		queryVals.Set("tenant_domain", inputs.TenantName)
 	}
 	if inputs.TenantCustomDomain != "" {
 		queryVals.Set("tenant_custom_domain", inputs.TenantCustomDomain)
 	}
-	tenantUrl := loginUrl + "?" + queryVals.Encode()
+	tenantURL := loginURL + "?" + queryVals.Encode()
 
 	loginState, err := GetLoginStateCookie(auth.cookieEncryption, httpCtx)
 	if err != nil {
 		// If
-		return nil, NewRedirectError("failed to retrieve login state", tenantUrl)
+		return nil, NewRedirectError("failed to retrieve login state", tenantURL)
 	}
 
 	tokenReq := auth.CodeTokenRequest(inputs.Code, loginState.CodeVerifier, callbackURL)

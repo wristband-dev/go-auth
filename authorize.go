@@ -31,8 +31,6 @@ type AuthorizeRequestOption interface {
 	apply(*AuthorizeRequest)
 }
 
-var defaultScopes = []string{"openid", "offline_access", "email"}
-
 // NewAuthorizeRequest builds the authorization request for redirecting to Wristband
 func (auth WristbandAuth) NewAuthorizeRequest(state string, opts ...AuthorizeRequestOption) *AuthorizeRequest {
 	req := &AuthorizeRequest{
@@ -53,7 +51,7 @@ func (auth WristbandAuth) NewAuthorizeRequest(state string, opts ...AuthorizeReq
 }
 
 // AuthorizeURL returns the authorization URL for redirecting to Wristband
-func (req AuthorizeRequest) AuthorizeURL(httpCtx HTTPContext, baseUrl string) string {
+func (req AuthorizeRequest) AuthorizeURL(httpCtx HTTPContext, baseURL string) string {
 	queryValues := httpCtx.Query()
 
 	params := url.Values{}
@@ -74,7 +72,7 @@ func (req AuthorizeRequest) AuthorizeURL(httpCtx HTTPContext, baseUrl string) st
 		params.Set("code_challenge_method", "S256")
 	}
 
-	endpoint := fmt.Sprintf("https://%s/api/v1%s?%s", baseUrl, DefaultAuthorizeEndpoint, params.Encode())
+	endpoint := fmt.Sprintf("https://%s/api/v1%s?%s", baseURL, DefaultAuthorizeEndpoint, params.Encode())
 	log.Printf("Authorize URL: %s\n", endpoint)
 
 	return endpoint

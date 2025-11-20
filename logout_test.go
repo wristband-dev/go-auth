@@ -26,7 +26,7 @@ func (m *mockHTTPRequest) Host() string {
 	return m.host
 }
 
-// Test LogoutUrl method
+// Test LogoutURL method
 
 func TestWristbandAuth_LogoutURL_WithTenantedHost(t *testing.T) {
 	authConfig := &AuthConfig{
@@ -55,7 +55,7 @@ func TestWristbandAuth_LogoutURL_WithTenantedHost(t *testing.T) {
 		State:       "test-state-123",
 	}
 
-	logoutURL, err := auth.LogoutUrl(req, logoutConfig)
+	logoutURL, err := auth.LogoutURL(req, logoutConfig)
 	if err != nil {
 		t.Fatalf("Failed to generate logout URL: %v", err)
 	}
@@ -116,7 +116,7 @@ func TestWristbandAuth_LogoutURL_WithCustomTenantDomain(t *testing.T) {
 		TenantCustomDomain: "custom.tenant.com",
 	}
 
-	logoutURL, err := auth.LogoutUrl(req, logoutConfig)
+	logoutURL, err := auth.LogoutURL(req, logoutConfig)
 	if err != nil {
 		t.Fatalf("Failed to generate logout URL: %v", err)
 	}
@@ -166,7 +166,7 @@ func TestWristbandAuth_LogoutURL_NoTenantedHost_WithLogoutRedirectURI(t *testing
 		RedirectURL: "https://example.com/goodbye",
 	}
 
-	logoutURL, err := auth.LogoutUrl(req, logoutConfig)
+	logoutURL, err := auth.LogoutURL(req, logoutConfig)
 	if err != nil {
 		t.Fatalf("Failed to generate logout URL: %v", err)
 	}
@@ -200,7 +200,7 @@ func TestWristbandAuth_LogoutURL_NoTenantedHost_NoLogoutRedirectURI(t *testing.T
 
 	logoutConfig := LogoutConfig{} // No redirect URL or tenant info
 
-	logoutURL, err := auth.LogoutUrl(req, logoutConfig)
+	logoutURL, err := auth.LogoutURL(req, logoutConfig)
 	if err != nil {
 		t.Fatalf("Failed to generate logout URL: %v", err)
 	}
@@ -238,7 +238,7 @@ func TestWristbandAuth_LogoutURL_MinimalParameters(t *testing.T) {
 		TenantName: "minimal-tenant",
 	}
 
-	logoutURL, err := auth.LogoutUrl(req, logoutConfig)
+	logoutURL, err := auth.LogoutURL(req, logoutConfig)
 	if err != nil {
 		t.Fatalf("Failed to generate logout URL: %v", err)
 	}
@@ -289,7 +289,7 @@ func TestWristbandAuth_LogoutURL_SpecialCharactersInParameters(t *testing.T) {
 		State:       "state with spaces & symbols!",
 	}
 
-	logoutURL, err := auth.LogoutUrl(req, logoutConfig)
+	logoutURL, err := auth.LogoutURL(req, logoutConfig)
 	if err != nil {
 		t.Fatalf("Failed to generate logout URL: %v", err)
 	}
@@ -339,7 +339,7 @@ func TestWristbandAuth_LogoutURL_WithApplicationCustomDomain(t *testing.T) {
 		TenantName: "tenant1",
 	}
 
-	logoutURL, err := auth.LogoutUrl(req, logoutConfig)
+	logoutURL, err := auth.LogoutURL(req, logoutConfig)
 	if err != nil {
 		t.Fatalf("Failed to generate logout URL: %v", err)
 	}
@@ -380,7 +380,7 @@ func TestWristbandAuth_LogoutURL_ParseTenantFromRootDomain(t *testing.T) {
 
 	logoutConfig := LogoutConfig{}
 
-	logoutURL, err := auth.LogoutUrl(req, logoutConfig)
+	logoutURL, err := auth.LogoutURL(req, logoutConfig)
 	if err != nil {
 		t.Fatalf("Failed to generate logout URL: %v", err)
 	}
@@ -426,7 +426,7 @@ func TestWristbandAuth_LogoutURL_BothTenantAndCustomDomain(t *testing.T) {
 		TenantCustomDomain: "custom.tenant.com",
 	}
 
-	logoutURL, err := auth.LogoutUrl(req, logoutConfig)
+	logoutURL, err := auth.LogoutURL(req, logoutConfig)
 	if err != nil {
 		t.Fatalf("Failed to generate logout URL: %v", err)
 	}
@@ -471,7 +471,7 @@ func TestWristbandAuth_LogoutURL_URLEncoding(t *testing.T) {
 		State:       "state=test&value=123",
 	}
 
-	logoutURL, err := auth.LogoutUrl(req, logoutConfig)
+	logoutURL, err := auth.LogoutURL(req, logoutConfig)
 	if err != nil {
 		t.Fatalf("Failed to generate logout URL: %v", err)
 	}
@@ -510,7 +510,7 @@ func TestWristbandAuth_LogoutURL_EmptyTenantDomain(t *testing.T) {
 		TenantName: "",
 	}
 
-	logoutURL, err := auth.LogoutUrl(req, logoutConfig)
+	logoutURL, err := auth.LogoutURL(req, logoutConfig)
 	if err != nil {
 		t.Fatalf("Failed to generate logout URL: %v", err)
 	}
@@ -548,11 +548,11 @@ func TestWristbandAuth_LogoutURL_NilRequest(t *testing.T) {
 	// This would panic in real usage, but demonstrates the method's dependency on HTTPRequest
 	defer func() {
 		if r := recover(); r == nil {
-			t.Error("Expected panic when calling LogoutUrl with nil request")
+			t.Error("Expected panic when calling LogoutURL with nil request")
 		}
 	}()
 
-	auth.LogoutUrl(nil, logoutConfig)
+	auth.LogoutURL(nil, logoutConfig)
 }
 
 func TestWristbandAuth_LogoutURL_LongParameters(t *testing.T) {
@@ -587,7 +587,7 @@ func TestWristbandAuth_LogoutURL_LongParameters(t *testing.T) {
 		State:       longState,
 	}
 
-	logoutURL, err := auth.LogoutUrl(req, logoutConfig)
+	logoutURL, err := auth.LogoutURL(req, logoutConfig)
 	if err != nil {
 		t.Fatalf("Failed to generate logout URL: %v", err)
 	}
@@ -638,7 +638,7 @@ func TestWristbandAuth_LogoutURL_DefaultLogoutEndpoint(t *testing.T) {
 		TenantName: "tenant1",
 	}
 
-	logoutURL, err := auth.LogoutUrl(req, logoutConfig)
+	logoutURL, err := auth.LogoutURL(req, logoutConfig)
 	if err != nil {
 		t.Fatalf("Failed to generate logout URL: %v", err)
 	}
@@ -680,7 +680,7 @@ func BenchmarkWristbandAuth_LogoutURL_WithTenant(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = auth.LogoutUrl(req, logoutConfig)
+		_, _ = auth.LogoutURL(req, logoutConfig)
 	}
 }
 
@@ -710,7 +710,7 @@ func BenchmarkWristbandAuth_LogoutURL_NoTenant(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = auth.LogoutUrl(req, logoutConfig)
+		_, _ = auth.LogoutURL(req, logoutConfig)
 	}
 }
 
@@ -743,6 +743,6 @@ func BenchmarkWristbandAuth_LogoutURL_CustomDomain(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = auth.LogoutUrl(req, logoutConfig)
+		_, _ = auth.LogoutURL(req, logoutConfig)
 	}
 }

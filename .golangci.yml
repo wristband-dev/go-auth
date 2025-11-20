@@ -25,13 +25,6 @@ linters:
   disable:
     - errcheck
     - usestdlibvars
-  settings:
-    staticcheck:
-      checks:
-        - all
-        - -SA1019 # omit Deprecated check
-        - -QF1001
-        - -ST1003
   exclusions:
     rules:
       # Exclude some linters from running on tests files.
@@ -51,3 +44,15 @@ formatters:
       rewrite-rules:
         - pattern: 'interface{}'
           replacement: 'any'
+
+linters-settings:
+  staticcheck:
+    checks:
+      - all
+      - -SA1019 # omit Deprecated check
+      - -QF1001
+      - -ST1003
+  revive:
+    rules:
+      - name: empty-block
+        disabled: true

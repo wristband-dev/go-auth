@@ -20,7 +20,7 @@ func (ac *AuthConfig) WristbandAuth(opts ...AuthOption) (WristbandAuth, error) {
 
 	// Initialize WristbandAuth with all required fields
 	auth := WristbandAuth{
-		Client:           resolver.wristbandApi,
+		Client:           resolver.wristbandAPI,
 		tokenEndpoint:    DefaultTokenEndpoint,
 		userInfoEndpoint: DefaultUserInfoEndpoint,
 		revokeEndpoint:   DefaultRevokeEndpoint,
