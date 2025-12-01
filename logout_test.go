@@ -171,14 +171,11 @@ func TestWristbandAuth_LogoutURL_NoTenantedHost_WithLogoutRedirectURI(t *testing
 		t.Fatalf("Failed to generate logout URL: %v", err)
 	}
 
-	// When tenant_domain is not in query params, RequestTenantName returns empty string (not error)
-	// This creates a logout URL with empty tenant prefix and includes redirect_url as parameter
-	expectedPrefix := "https://-test.wristband.com/api/v1/logout?client_id=test-client-id"
-	if !strings.Contains(logoutURL, expectedPrefix) {
-		t.Errorf("Expected logout URL to contain %s, got %s", expectedPrefix, logoutURL)
-	}
-	if !strings.Contains(logoutURL, "redirect_url=https%3A%2F%2Fexample.com%2Fgoodbye") {
-		t.Errorf("Expected redirect_url parameter in logout URL, got %s", logoutURL)
+	// When no tenant can be resolved and a redirect URL is provided,
+	// the redirect URL is returned directly
+	expected := "https://example.com/goodbye"
+	if logoutURL != expected {
+		t.Errorf("Expected logout URL %s, got %s", expected, logoutURL)
 	}
 }
 
@@ -205,9 +202,9 @@ func TestWristbandAuth_LogoutURL_NoTenantedHost_NoLogoutRedirectURI(t *testing.T
 		t.Fatalf("Failed to generate logout URL: %v", err)
 	}
 
-	// When tenant_domain query param is not set, RequestTenantName returns empty string
-	// which creates a URL with empty tenant prefix
-	expected := "https://-test.wristband.com/api/v1/logout?client_id=test-client-id"
+	// When no tenant can be resolved and no redirect URL is provided,
+	// the application login page URL is returned
+	expected := "https://test.wristband.com/login?client_id=test-client-id"
 	if logoutURL != expected {
 		t.Errorf("Expected logout URL %s, got %s", expected, logoutURL)
 	}
@@ -515,9 +512,9 @@ func TestWristbandAuth_LogoutURL_EmptyTenantDomain(t *testing.T) {
 		t.Fatalf("Failed to generate logout URL: %v", err)
 	}
 
-	// With empty tenant domain, it should still create a tenanted host with empty tenant
-	// This results in "test.wristband.com"
-	expected := "https://test.wristband.com/api/v1/logout?client_id=test-client-id"
+	// With empty tenant domain, no tenant can be resolved
+	// This returns the application login page URL
+	expected := "https://test.wristband.com/login?client_id=test-client-id"
 	if logoutURL != expected {
 		t.Errorf("Expected logout URL %s, got %s", expected, logoutURL)
 	}

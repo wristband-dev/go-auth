@@ -343,13 +343,10 @@ func TestWristbandApp_LoginHandler_WithoutTenantDomain(t *testing.T) {
 	}
 
 	location := res.Header().Get("Location")
-	// Without tenant in query params, RequestTenantName returns empty string
-	// This creates an authorize URL with empty tenant prefix
-	if !strings.Contains(location, "test.wristband.com/api/v1/") {
-		t.Errorf("Expected authorize URL, got %s", location)
-	}
-	if !strings.Contains(location, "oauth2/authorize") {
-		t.Errorf("Expected OAuth authorize endpoint, got %s", location)
+	// Without tenant in query params, RequestTenantName returns error
+	// This redirects to the application login page
+	if !strings.Contains(location, "test.wristband.com/login") {
+		t.Errorf("Expected application login URL, got %s", location)
 	}
 	if !strings.Contains(location, "client_id=test-client") {
 		t.Errorf("Expected client_id in URL, got %s", location)
@@ -393,13 +390,13 @@ func TestWristbandApp_LoginHandler_WithCustomLoginPage(t *testing.T) {
 	}
 
 	location := res.Header().Get("Location")
-	// Without tenant in query params, RequestTenantName returns empty string
-	// This creates an authorize URL with empty tenant prefix (not custom login page)
-	if !strings.Contains(location, "test.wristband.com/api/v1/") {
-		t.Errorf("Expected authorize URL, got %s", location)
+	// Without tenant in query params, RequestTenantName returns error
+	// When custom login page is configured, it redirects there
+	if !strings.Contains(location, "custom.example.com/login") {
+		t.Errorf("Expected custom login page URL, got %s", location)
 	}
-	if !strings.Contains(location, "oauth2/authorize") {
-		t.Errorf("Expected OAuth authorize endpoint, got %s", location)
+	if !strings.Contains(location, "client_id=test-client") {
+		t.Errorf("Expected client_id in URL, got %s", location)
 	}
 }
 
@@ -814,13 +811,14 @@ func TestWristbandAuth_CleanupOldLoginCookies(t *testing.T) {
 	mockCookieReq := mockCtx.cookieRequest.(*mockCookieRequest)
 
 	// Add 5 login cookies with different timestamps
+	// Using the actual LoginStateCookiePrefix which is "login#"
 	now := time.Now().UnixMilli()
 	cookieNames := []string{
-		fmt.Sprintf("wb-login#state1#%d", now-4000), // oldest
-		fmt.Sprintf("wb-login#state2#%d", now-3000),
-		fmt.Sprintf("wb-login#state3#%d", now-2000),
-		fmt.Sprintf("wb-login#state4#%d", now-1000),
-		fmt.Sprintf("wb-login#state5#%d", now), // newest
+		fmt.Sprintf("login#state1#%d", now-4000), // oldest
+		fmt.Sprintf("login#state2#%d", now-3000),
+		fmt.Sprintf("login#state3#%d", now-2000),
+		fmt.Sprintf("login#state4#%d", now-1000),
+		fmt.Sprintf("login#state5#%d", now), // newest
 	}
 
 	for _, name := range cookieNames {
@@ -865,7 +863,8 @@ func TestLoginStateCookieName_WithTimestamp(t *testing.T) {
 
 	cookieName := loginStateCookieName(stateStr, timestamp)
 
-	expectedName := "wb-login#test-state-123#1634567890123"
+	// LoginStateCookiePrefix is "login#"
+	expectedName := "login#test-state-123#1634567890123"
 	if cookieName != expectedName {
 		t.Errorf("Expected cookie name %s, got %s", expectedName, cookieName)
 	}
@@ -901,8 +900,9 @@ func TestLoginState_CreatedAt(t *testing.T) {
 	}
 
 	// Verify the cookie name includes the timestamp
+	// LoginStateCookiePrefix is "login#"
 	cookieName := state.CookieName()
-	if !strings.Contains(cookieName, "wb-login#") {
+	if !strings.Contains(cookieName, "login#") {
 		t.Error("Cookie name should start with the login state prefix")
 	}
 
