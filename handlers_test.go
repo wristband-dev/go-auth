@@ -237,7 +237,6 @@ func TestNewApp(t *testing.T) {
 
 	sessionManager := newMockSessionManager()
 	input := AppInput{
-		CallbackURL:    "http://example.com/callback",
 		SessionManager: sessionManager,
 		SessionMetadataExtractor: func(s Session) any {
 			return map[string]string{"custom": "metadata"}
@@ -246,9 +245,6 @@ func TestNewApp(t *testing.T) {
 
 	app := NewApp(auth, input)
 
-	if app.CallbackURL != input.CallbackURL {
-		t.Errorf("Expected CallbackURL %s, got %s", input.CallbackURL, app.CallbackURL)
-	}
 	if app.SessionManager != sessionManager {
 		t.Error("SessionManager not set correctly")
 	}
@@ -261,7 +257,6 @@ func TestNewAppWithOptions(t *testing.T) {
 	auth := WristbandAuth{}
 	sessionManager := newMockSessionManager()
 	input := AppInput{
-		CallbackURL:    "http://example.com/callback",
 		SessionManager: sessionManager,
 	}
 
@@ -413,7 +408,6 @@ func TestWristbandApp_CallbackHandler_Success(t *testing.T) {
 
 	app := WristbandApp{
 		SessionManager: sessionManager,
-		CallbackURL:    "http://example.com/callback",
 	}
 
 	// This test would need more mocking for the full callback flow

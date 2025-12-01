@@ -183,10 +183,14 @@ func (ac *AuthConfig) Client() ConfidentialClient {
 // RequestTenantName returns the tenant name from the request.
 func (auth WristbandAuth) RequestTenantName(req HTTPRequest) (string, error) {
 	if parseTenantName := auth.configResolver.GetParseTenantFromRootDomain(); parseTenantName != "" {
-		if !strings.HasSuffix(req.Host(), parseTenantName) {
+		host := req.Host()
+		if portIdx := strings.Index(host, ":"); portIdx > 0 {
+			host = host[:portIdx]
+		}
+		if !strings.HasSuffix(host, parseTenantName) {
 			return parseTenantName, fmt.Errorf("%s is not a valid tenant domain", parseTenantName)
 		}
-		return strings.TrimSuffix(req.Host(), "."+parseTenantName), nil
+		return strings.TrimSuffix(host, "."+parseTenantName), nil
 	}
 	return req.Query().Get("tenant_domain"), nil
 }

@@ -43,7 +43,6 @@ type (
 
 // AppInput is the input structure for configuring the WristbandApp.
 type AppInput struct {
-	CallbackURL              string
 	SessionManager           SessionManager
 	SessionMetadataExtractor func(Session) any
 }
@@ -52,12 +51,13 @@ type AppInput struct {
 func NewApp(auth WristbandAuth, input AppInput, opts ...AppOption) WristbandApp {
 	app := &WristbandApp{
 		WristbandAuth:            auth,
-		CallbackURL:              input.CallbackURL,
 		SessionManager:           input.SessionManager,
 		sessionMetadataExtractor: input.SessionMetadataExtractor,
 		cookieOpts: CookieOptions{
-			Path:   "/",
-			MaxAge: 3600,
+			Path:                            "/",
+			SameSite:                        http.SameSiteLaxMode,
+			MaxAge:                          3600,
+			DangerouslyDisableSecureCookies: true,
 		},
 	}
 	for _, opt := range opts {
@@ -88,7 +88,6 @@ func (f appOptionFunc) apply(c *WristbandApp) {
 // WristbandApp extends the WristbandAuth with additional standard library http.Handler functionality.
 type WristbandApp struct {
 	WristbandAuth
-	CallbackURL              string
 	SessionManager           SessionManager
 	cookieOpts               CookieOptions
 	sessionMetadataExtractor func(Session) any
@@ -132,7 +131,7 @@ func (app WristbandApp) CallbackHandler() http.HandlerFunc {
 	return func(res http.ResponseWriter, req *http.Request) {
 		ctx := app.HTTPContext(res, req)
 		// Create session
-		callbackContext, err := app.HandleCallback(ctx, app.CallbackURL)
+		callbackContext, err := app.HandleCallback(ctx)
 		if err != nil {
 			if redirectError, ok := err.(*RedirectError); ok {
 				http.Redirect(res, req, redirectError.URL, http.StatusSeeOther)

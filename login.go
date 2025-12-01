@@ -234,7 +234,7 @@ type CallbackContext struct {
 var ErrorNoLoginState = errors.New("no login state found")
 
 // HandleCallback processes the OAuth callback, exchanges the authorization code for tokens.
-func (auth WristbandAuth) HandleCallback(httpCtx HTTPContext, callbackURL string) (*CallbackContext, error) {
+func (auth WristbandAuth) HandleCallback(httpCtx HTTPContext) (*CallbackContext, error) {
 	if err := RequestError(httpCtx.Query()); err != nil {
 		return nil, err
 	}
@@ -269,7 +269,7 @@ func (auth WristbandAuth) HandleCallback(httpCtx HTTPContext, callbackURL string
 		return nil, NewRedirectError("failed to retrieve login state", tenantURL)
 	}
 
-	tokenReq := auth.CodeTokenRequest(inputs.Code, loginState.CodeVerifier, callbackURL)
+	tokenReq := auth.CodeTokenRequest(inputs.Code, loginState.CodeVerifier)
 
 	// Exchange code for tokens
 	tokenResponse, err := tokenReq.Do(auth.httpClient)

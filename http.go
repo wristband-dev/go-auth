@@ -46,7 +46,7 @@ func (std *StandardHTTP) Query() QueryValueResolver {
 
 // Host returns the host of the HTTP request.
 func (std *StandardHTTP) Host() string {
-	return std.req.URL.Host
+	return std.req.Host
 }
 
 // WriteCookie writes a cookie to the HTTP response using http.Cookie.
@@ -59,6 +59,7 @@ func (std *StandardHTTP) WriteCookie(name, value string) error {
 		Path:     std.cookieOpts.Path,
 		Domain:   std.cookieOpts.Domain,
 		MaxAge:   std.cookieOpts.MaxAge,
+		SameSite: std.cookieOpts.SameSite,
 	}
 
 	return cookies.WriteCookie(std.res, cookie)
@@ -75,7 +76,7 @@ func (std *StandardHTTP) ClearCookie(name string) {
 		Name:     name,
 		Value:    "",
 		HttpOnly: true,
-		Secure:   true,
+		Secure:   !std.cookieOpts.DangerouslyDisableSecureCookies,
 		Path:     std.cookieOpts.Path,
 		Domain:   std.cookieOpts.Domain,
 		MaxAge:   -1,

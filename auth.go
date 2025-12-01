@@ -14,9 +14,6 @@ func (ac *AuthConfig) WristbandAuth(opts ...AuthOption) (WristbandAuth, error) {
 	if err != nil {
 		return WristbandAuth{}, err
 	}
-	if err := resolver.PreloadSdkConfig(); err != nil {
-		return WristbandAuth{}, err
-	}
 
 	// Initialize WristbandAuth with all required fields
 	auth := WristbandAuth{
@@ -81,7 +78,7 @@ func (auth WristbandAuth) UserInfoEndpoint() string {
 }
 
 // CodeTokenRequest creates a TokenRequest for exchanging an authorization code for an access token.
-func (auth WristbandAuth) CodeTokenRequest(code, codeVerifier, redirectURI string) TokenRequest {
+func (auth WristbandAuth) CodeTokenRequest(code, codeVerifier string) TokenRequest {
 	return TokenRequest{
 		Client:       auth.Client,
 		Scopes:       auth.configResolver.GetScopes(),
@@ -89,7 +86,7 @@ func (auth WristbandAuth) CodeTokenRequest(code, codeVerifier, redirectURI strin
 		GrantType:    GrantTypeCode,
 		Code:         code,
 		CodeVerifier: codeVerifier,
-		RedirectURI:  redirectURI,
+		RedirectURI:  auth.configResolver.GetRedirectURI(),
 	}
 }
 

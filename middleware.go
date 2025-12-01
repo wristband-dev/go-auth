@@ -50,7 +50,7 @@ func (app WristbandApp) RefreshTokenIfExpired(next http.Handler) http.Handler {
 		if err != nil {
 			// Failed to refresh token, clear session and redirect to login
 			_ = app.SessionManager.ClearSession(req.Context(), res, req)
-			http.Redirect(res, req, app.configResolver.MustLoginURL()+"?return_url="+url.QueryEscape(req.URL.Path), http.StatusFound)
+			http.Redirect(res, req, app.configResolver.MustLoginURL()+"?return_url="+url.QueryEscape(req.URL.String()), http.StatusFound)
 			return
 		}
 
@@ -81,7 +81,7 @@ func (app WristbandApp) RequireAuthentication(next http.Handler) http.Handler {
 		session, err := app.SessionManager.GetSession(req.Context(), req)
 		if err != nil {
 			// No session, redirect to login with return URL
-			returnURL := url.QueryEscape(req.URL.Path)
+			returnURL := url.QueryEscape(req.URL.String())
 			redirectURL := app.configResolver.MustLoginURL()
 			if !strings.Contains(redirectURL, "?") {
 				redirectURL += "?"

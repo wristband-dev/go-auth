@@ -3,6 +3,7 @@ package goauth
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strconv"
 	"strings"
 
@@ -30,6 +31,7 @@ type (
 		MaxAge int
 		// DangerouslyDisableSecureCookies creates cookies without the Secure flag. Not recommended for production.
 		DangerouslyDisableSecureCookies bool
+		SameSite                        http.SameSite
 	}
 )
 
