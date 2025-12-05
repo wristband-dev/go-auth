@@ -41,6 +41,20 @@ func WithState(state string) LogoutOption {
 	})
 }
 
+// WithTenantCustomDomain sets the tenant custom domain.
+func WithTenantCustomDomain(tenantDomain string) LogoutOption {
+	return LogoutOptionFunc(func(config *LogoutConfig) {
+		config.TenantCustomDomain = tenantDomain
+	})
+}
+
+// WithTenantName sets the tenant name.
+func WithTenantName(tenantName string) LogoutOption {
+	return LogoutOptionFunc(func(config *LogoutConfig) {
+		config.TenantName = tenantName
+	})
+}
+
 // LogoutURL builds the logout URL for redirecting to Wristband
 func (auth WristbandAuth) LogoutURL(req HTTPRequest, config LogoutConfig) (string, error) {
 	if len(config.State) > 512 {

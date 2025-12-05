@@ -5,6 +5,7 @@ on:
   pull_request:
     branches: [main]
 
+# TODO Check multiple versions of Go
 jobs:
   lint:
     runs-on: ubuntu-latest

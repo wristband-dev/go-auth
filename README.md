@@ -91,14 +91,13 @@ if err != nil {
 #### Key Features:
 - **🏢 Multi-Tenant Architecture**: Built-in support for multi-tenant applications with custom domains
 - **🍪 Secure Session Management**: Encrypted cookie-based session storage with automatic token refresh
-- **🛡️ Security First**: Secure defaults with CSRF protection, encrypted cookies, and token validation
 - **🚀 Easy Integration**: Simple middleware-based integration with standard `net/http`
 - **⚡ Token Management**: Automatic access token refresh and secure token storage
 ### 2) Set Up Session Storage
 
 This Wristband authentication SDK is unopinionated about how you store and manage your application session data after the user has authenticated. We typically recommend cookie-based sessions due to it being lighter-weight and not requiring a backend session store like Redis or other technologies.
 
-The SDK provides a session manager interface that you need to implement:
+The SDK provides a session manager interface that you need to implement.
 
 ```go
 type SessionManager interface {
@@ -106,53 +105,108 @@ type SessionManager interface {
     GetSession(ctx context.Context, r *http.Request) (*goauth.Session, error)
     ClearSession(ctx context.Context, w http.ResponseWriter, r *http.Request) error
 }
+```
 
-// Example implementation using encrypted cookies
-type CookieSessionManager struct {
-    encryptor *cookies.CookieEncryptor
+Example implementation using `github.com/gorilla`:
+
+```go
+import (
+	"github.com/gorilla/securecookie"
+	"github.com/gorilla/sessions"
+)
+
+func NewStore() goauth.SessionManager {
+    store := sessions.NewCookieStore(securecookie.GenerateRandomKey(32), securecookie.GenerateRandomKey(32))
+    return &GorillaSessionManager{
+        store: store,
+    }
 }
 
-func (csm *CookieSessionManager) StoreSession(ctx context.Context, w http.ResponseWriter, r *http.Request, session *goauth.Session) error {
-    encryptedData := csm.encryptor.Encrypt(session)
-    cookie := &http.Cookie{
-        Name:     "session",
-        Value:    encryptedData,
-        Path:     "/",
-        HttpOnly: true,
-        Secure:   true,
-        SameSite: http.SameSiteLaxMode,
-    }
-    http.SetCookie(w, cookie)
-    return nil
+const (
+	// SessionName is the name used for the session cookie
+	SessionName = "session"
+
+	// SessionKey is the key used to store auth data in the session
+	SessionKey = "auth_session"
+)
+
+// GorillaSessionManager implements the wristbandauth.SessionManager interface
+// using gorilla/sessions for session management
+type GorillaSessionManager struct {
+	store sessions.Store
 }
 
-func (csm *CookieSessionManager) GetSession(ctx context.Context, r *http.Request) (*goauth.Session, error) {
-    cookie, err := r.Cookie("session")
-    if err != nil {
-        return nil, err
-    }
+// StoreSession implements the goauth.SessionManager interface
+func (m *GorillaSessionManager) StoreSession(_ context.Context, w http.ResponseWriter, r *http.Request, session *goauth.Session) error {
+	// Get existing session or create a new one
+	sess, err := m.store.Get(r, SessionName)
+	if err != nil {
+		// If there's an error getting the session, create a new one
+		// This can happen if the session was tampered with or is invalid
+		sess = sessions.NewSession(m.store, SessionName)
+		sess.Options = &sessions.Options{
+			Path:     "/",
+			MaxAge:   86400 * 30, // 30 days
+			HttpOnly: true,
+			Secure:   false, // Make sure this is true in production
+			SameSite: http.SameSiteLaxMode,
+		}
+	}
 
-    var session goauth.Session
-    err = csm.encryptor.Decrypt(cookie.Value, &session)
-    if err != nil {
-        return nil, err
-    }
+	// Serialize the session to JSON
+	sessionJSON, err := json.Marshal(session)
+	if err != nil {
+		return err
+	}
 
-    return &session, nil
+	// Store the serialized session in the session store
+	sess.Values[SessionKey] = string(sessionJSON)
+
+	// Save the session
+	return sess.Save(r, w)
 }
 
-func (csm *CookieSessionManager) ClearSession(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
-    cookie := &http.Cookie{
-        Name:     "session",
-        Value:    "",
-        Path:     "/",
-        HttpOnly: true,
-        Secure:   true,
-        SameSite: http.SameSiteLaxMode,
-        MaxAge:   -1,
-    }
-    http.SetCookie(w, cookie)
-    return nil
+// GetSession implements the goauth.SessionManager interface
+func (m *GorillaSessionManager) GetSession(_ context.Context, r *http.Request) (*goauth.Session, error) {
+	// Get existing session
+	sess, err := m.store.Get(r, SessionName)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check if the session contains auth data
+	sessionJSON, ok := sess.Values[SessionKey]
+	if !ok {
+		return nil, errors.New("no auth session found")
+	}
+
+	// Parse the serialized session
+	var authSession goauth.Session
+	err = json.Unmarshal([]byte(sessionJSON.(string)), &authSession)
+	if err != nil {
+		return nil, err
+	}
+
+	return &authSession, nil
+}
+
+// ClearSession implements the goauth.SessionManager interface
+func (m *GorillaSessionManager) ClearSession(_ context.Context, w http.ResponseWriter, r *http.Request) error {
+	// Get existing session
+	sess, err := m.store.Get(r, SessionName)
+	if err != nil {
+		// If we can't get the session, that's fine - we wanted to clear it anyway
+		return nil
+	}
+
+	// Remove the auth data from the session
+	delete(sess.Values, SessionKey)
+
+	// Set session to expire
+	sess.Options.MaxAge = -1
+
+	// Save the session
+	return sess.Save(r, w)
 }
 ```
 
