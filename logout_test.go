@@ -47,7 +47,7 @@ func TestWristbandAuth_LogoutURL_WithTenantedHost(t *testing.T) {
 	}
 
 	req := newMockHTTPRequest()
-	req.queryValues.Set("tenant_domain", "tenant1")
+	req.queryValues.Set("tenant_name", "tenant1")
 
 	logoutConfig := LogoutConfig{
 		TenantName:  "tenant1",
@@ -229,7 +229,7 @@ func TestWristbandAuth_LogoutURL_MinimalParameters(t *testing.T) {
 	}
 
 	req := newMockHTTPRequest()
-	req.queryValues.Set("tenant_domain", "minimal-tenant")
+	req.queryValues.Set("tenant_name", "minimal-tenant")
 
 	logoutConfig := LogoutConfig{
 		TenantName: "minimal-tenant",
@@ -278,7 +278,7 @@ func TestWristbandAuth_LogoutURL_SpecialCharactersInParameters(t *testing.T) {
 	}
 
 	req := newMockHTTPRequest()
-	req.queryValues.Set("tenant_domain", "tenant1")
+	req.queryValues.Set("tenant_name", "tenant1")
 
 	logoutConfig := LogoutConfig{
 		TenantName:  "tenant1",
@@ -330,7 +330,7 @@ func TestWristbandAuth_LogoutURL_WithApplicationCustomDomain(t *testing.T) {
 	}
 
 	req := newMockHTTPRequest()
-	req.queryValues.Set("tenant_domain", "tenant1")
+	req.queryValues.Set("tenant_name", "tenant1")
 
 	logoutConfig := LogoutConfig{
 		TenantName: "tenant1",
@@ -415,7 +415,7 @@ func TestWristbandAuth_LogoutURL_BothTenantAndCustomDomain(t *testing.T) {
 
 	req := newMockHTTPRequest()
 	// Both parameters present - custom domain should take precedence
-	req.queryValues.Set("tenant_domain", "tenant1")
+	req.queryValues.Set("tenant_name", "tenant1")
 	req.queryValues.Set("tenant_custom_domain", "custom.tenant.com")
 
 	logoutConfig := LogoutConfig{
@@ -460,7 +460,7 @@ func TestWristbandAuth_LogoutURL_URLEncoding(t *testing.T) {
 	}
 
 	req := newMockHTTPRequest()
-	req.queryValues.Set("tenant_domain", "tenant1")
+	req.queryValues.Set("tenant_name", "tenant1")
 
 	logoutConfig := LogoutConfig{
 		TenantName:  "tenant1",
@@ -501,7 +501,7 @@ func TestWristbandAuth_LogoutURL_EmptyTenantDomain(t *testing.T) {
 	}
 
 	req := newMockHTTPRequest()
-	req.queryValues.Set("tenant_domain", "") // Empty tenant domain
+	req.queryValues.Set("tenant_name", "") // Empty tenant domain
 
 	logoutConfig := LogoutConfig{
 		TenantName: "",
@@ -576,7 +576,7 @@ func TestWristbandAuth_LogoutURL_LongParameters(t *testing.T) {
 	}
 
 	req := newMockHTTPRequest()
-	req.queryValues.Set("tenant_domain", "tenant1")
+	req.queryValues.Set("tenant_name", "tenant1")
 
 	logoutConfig := LogoutConfig{
 		TenantName:  "tenant1",
@@ -629,7 +629,7 @@ func TestWristbandAuth_LogoutURL_DefaultLogoutEndpoint(t *testing.T) {
 	}
 
 	req := newMockHTTPRequest()
-	req.queryValues.Set("tenant_domain", "tenant1")
+	req.queryValues.Set("tenant_name", "tenant1")
 
 	logoutConfig := LogoutConfig{
 		TenantName: "tenant1",
@@ -667,7 +667,7 @@ func BenchmarkWristbandAuth_LogoutURL_WithTenant(b *testing.B) {
 	}
 
 	req := newMockHTTPRequest()
-	req.queryValues.Set("tenant_domain", "tenant1")
+	req.queryValues.Set("tenant_name", "tenant1")
 
 	logoutConfig := LogoutConfig{
 		TenantName:  "tenant1",

@@ -36,7 +36,7 @@ type LoginOptions struct {
 	// "tenant_custom_domain" request query parameter.
 	DefaultTenantCustomDomain string
 	// DefaultTenantName is an optional default tenant custom domain to use for the login request in the
-	// event the name cannot be found in either the subdomain or the "tenant_domain" request
+	// event the name cannot be found in either the subdomain or the "tenant_name" request
 	// query parameter (depending on your subdomain configuration).
 	DefaultTenantName string
 
@@ -256,7 +256,7 @@ func (auth WristbandAuth) HandleCallback(httpCtx HTTPContext) (*CallbackContext,
 	if auth.configResolver.GetParseTenantFromRootDomain() != "" {
 		loginURL = strings.ReplaceAll(loginURL, TenantDomainToken, inputs.TenantName)
 	} else {
-		queryVals.Set("tenant_domain", inputs.TenantName)
+		queryVals.Set("tenant_name", inputs.TenantName)
 	}
 	if inputs.TenantCustomDomain != "" {
 		queryVals.Set("tenant_custom_domain", inputs.TenantCustomDomain)

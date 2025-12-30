@@ -3,7 +3,6 @@ package goauth
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -133,17 +132,15 @@ func (app WristbandApp) CallbackHandler() http.HandlerFunc {
 		// Create session
 		callbackContext, err := app.HandleCallback(ctx)
 		if err != nil {
-			if redirectError, ok := err.(*RedirectError); ok {
+			if redirectError, ok := IsRedirectError(err); ok {
 				http.Redirect(res, req, redirectError.URL, http.StatusSeeOther)
 			}
-			fmt.Println(err.Error())
 			http.Error(res, "Failed to handle callback", http.StatusInternalServerError)
 			return
 		}
 
 		// Store session using the session manager
 		if err := app.SessionManager.StoreSession(req.Context(), res, req, callbackContext.Session()); err != nil {
-			fmt.Println(err.Error())
 			http.Error(res, "Failed to store session", http.StatusInternalServerError)
 			return
 		}

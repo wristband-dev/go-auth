@@ -88,14 +88,9 @@ if err != nil {
 }
 ```
 
-#### Key Features:
-- **🏢 Multi-Tenant Architecture**: Built-in support for multi-tenant applications with custom domains
-- **🍪 Secure Session Management**: Encrypted cookie-based session storage with automatic token refresh
-- **🚀 Easy Integration**: Simple middleware-based integration with standard `net/http`
-- **⚡ Token Management**: Automatic access token refresh and secure token storage
 ### 2) Set Up Session Storage
 
-This Wristband authentication SDK is unopinionated about how you store and manage your application session data after the user has authenticated. We typically recommend cookie-based sessions due to it being lighter-weight and not requiring a backend session store like Redis or other technologies.
+This Wristband authentication SDK is unopinionated about how you store and manage your application session data after the user has authenticated. We typically recommend encrypted cookie-based sessions due to it being lighter-weight and not requiring a backend session store like Redis or other technologies.
 
 The SDK provides a session manager interface that you need to implement.
 
@@ -256,7 +251,9 @@ http.HandleFunc("/logout", app.LogoutHandler(
 ))
 ```
 
-<br/>### 4) Guard Your Protected APIs and Handle Token Refresh
+<br/>
+
+### 4) Guard Your Protected APIs and Handle Token Refresh
 
 Create middleware to protect your APIs and handle token refresh:
 
@@ -430,22 +427,6 @@ if err != nil {
 }
 ```
 
-### Client Credentials Flow
-
-For machine-to-machine authentication:
-
-```go
-tokenReq := goauth.NewClientCredentialsTokenRequest(
-    goauth.NewConfidentialClient(clientID, clientSecret),
-    "https://your-app.wristband.dev/api/v1/oauth2/token",
-)
-
-tokenResponse, err := tokenReq.Do(http.DefaultClient)
-if err != nil {
-    log.Printf("Client credentials token request failed: %v", err)
-}
-```
-
 ## Cookie Configuration
 
 Configure cookie options for session storage:
@@ -460,15 +441,6 @@ app := goauth.NewApp(wristbandAuth, appInput,
     }),
 )
 ```
-
-## Security Considerations
-
-- **Always use HTTPS in production** - The SDK sets secure cookies by default
-- **Implement proper session storage** - Use Redis, database, or other secure storage for production
-- **Validate redirect URLs** - Ensure callback URLs are properly validated
-- **Use strong encryption keys** - Provide a secure 32-byte key for cookie encryption
-- **Implement proper CSRF protection** - The SDK includes built-in state parameter validation
-- **Monitor token expiration** - Use the refresh middleware for automatic token renewal
 
 ## Testing
 
@@ -519,7 +491,7 @@ go doc -all github.com/wristband-dev/go-auth
 ## Support
 
 - **Documentation**: [https://docs.wristband.dev](https://docs.wristband.dev)
-- **Community**: [Wristband Community Forum](https://community.wristband.dev)
+- **Slack**: [Wristband Community Slack](https://join.slack.com/t/wristband-community/shared_invite/zt-2x9k6anrq-azzjk1Bkk_fpwN54myoFQw)
 - **Email**: [support@wristband.dev](mailto:support@wristband.dev)
 - **Issues**: [GitHub Issues](https://github.com/wristband-dev/go-auth/issues)
 
@@ -530,6 +502,7 @@ Wristband provides SDKs for multiple frameworks:
 - [Next.js SDK](https://github.com/wristband-dev/nextjs-auth)
 - [FastAPI SDK](https://github.com/wristband-dev/fastapi-auth)
 - [Django SDK](https://github.com/wristband-dev/django-auth)
+- [Go Demo App](https://github.com/wristband-dev/go-demo-app)
 
 ## License
 

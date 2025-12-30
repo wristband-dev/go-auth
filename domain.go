@@ -188,11 +188,11 @@ func (auth WristbandAuth) RequestTenantName(req HTTPRequest) (string, error) {
 			host = host[:portIdx]
 		}
 		if !strings.HasSuffix(host, parseTenantName) {
-			return parseTenantName, fmt.Errorf("%s is not a valid tenant domain", parseTenantName)
+			return parseTenantName, fmt.Errorf("%s is not a valid tenant name", parseTenantName)
 		}
 		return strings.TrimSuffix(host, "."+parseTenantName), nil
 	}
-	return req.Query().Get("tenant_domain"), nil
+	return req.Query().Get("tenant_name"), nil
 }
 
 // RequestCustomTenantName returns the custom tenant name from the request.

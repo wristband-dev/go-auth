@@ -66,6 +66,7 @@ func RequestError(queryValues QueryValueResolver) error {
 type RedirectError struct {
 	Message string
 	URL     string
+	Reason  string
 }
 
 func (e RedirectError) Error() string {

@@ -7,8 +7,21 @@ import (
 	"time"
 )
 
-// TenantDomainToken is the token used to represent tenant domains in URLs
-const TenantDomainToken = "{tenant_domain}"
+const (
+	// TenantDomainToken is the (deprecated) token used to represent tenant domains in URLs00
+	TenantDomainToken = "{tenant_domain}"
+	// TenantNameToken is the token used to represent tenant domains in URLs
+	TenantNameToken = "{tenant_name}"
+
+	// TenantPlaceholderMessage is a string describing the placeholders.
+	TenantPlaceholderMessage = `"{tenant_name}" or "{tenant_domain}" placeholder`
+)
+
+// TenantPlaceholders is the list of possible tokens that can be used as placeholders.
+var TenantPlaceholders = []string{
+	TenantDomainToken,
+	TenantNameToken,
+}
 
 // ConfigResolver resolves and validates Wristband authentication configuration,
 // supporting both manual configuration and auto-configuration via the Wristband SDK configuration endpoint
@@ -201,21 +214,35 @@ func (cr *ConfigResolver) validatePartialURLAuthConfigs() error {
 
 func (cr *ConfigResolver) validateTenantDomainTokens() error {
 	if cr.ParseTenantFromRootDomain != "" {
-		if !strings.Contains(cr.LoginURL, TenantDomainToken) {
-			return fmt.Errorf("the [login_url] must contain the \"%s\" token when using the [parse_tenant_from_root_domain] config", TenantDomainToken)
+		if _, ok := containsTenantPlaceholder(cr.LoginURL); !ok {
+			return fmt.Errorf("the [login_url] must contain the %s when using the [parse_tenant_from_root_domain] config", TenantPlaceholderMessage)
 		}
-		if !strings.Contains(cr.RedirectURI, TenantDomainToken) {
-			return fmt.Errorf("the [redirect_uri] must contain the \"%s\" token when using the [parse_tenant_from_root_domain] config", TenantDomainToken)
+		// TODO Finish
+		if _, ok := containsTenantPlaceholder(cr.RedirectURI); !ok {
+			return fmt.Errorf("the [redirect_uri] must contain the %q when using the [parse_tenant_from_root_domain] config", TenantPlaceholderMessage)
 		}
 	} else if cr.SdkConfiguration != nil {
-		if strings.Contains(cr.LoginURL, TenantDomainToken) {
-			return fmt.Errorf("the [login_url] cannot contain the \"%s\" token when the [parse_tenant_from_root_domain] is absent", TenantDomainToken)
+		if _, ok := containsTenantPlaceholder(cr.LoginURL); !ok {
+			return fmt.Errorf("the [login_url] cannot contain the %q when the [parse_tenant_from_root_domain] is absent", TenantPlaceholderMessage)
 		}
-		if strings.Contains(cr.RedirectURI, TenantDomainToken) {
-			return fmt.Errorf("the [redirect_uri] cannot contain the \"%s\" token when the [parse_tenant_from_root_domain] is absent", TenantDomainToken)
+		if _, ok := containsTenantPlaceholder(cr.RedirectURI); !ok {
+			return fmt.Errorf("the [redirect_uri] cannot contain the %q when the [parse_tenant_from_root_domain] is absent", TenantPlaceholderMessage)
 		}
 	}
 	return nil
+}
+
+func containsTenantPlaceholder(value string) (string, bool) {
+	return containsAny(value, TenantPlaceholders...)
+}
+
+func containsAny(s string, substrs ...string) (string, bool) {
+	for _, substr := range substrs {
+		if strings.Contains(s, substr) {
+			return s, true
+		}
+	}
+	return "", false
 }
 
 func (cr *ConfigResolver) validateAllDynamicConfigs(sdkConfig *SdkConfiguration) error {
@@ -273,13 +300,8 @@ func (cr *ConfigResolver) GetClientID() string {
 	return cr.ClientID
 }
 
-// GetClientSecret returns the client secret.
-func (cr *ConfigResolver) GetClientSecret() string {
-	return cr.ClientSecret
-}
-
-// GetLoginStateSecret returns the login state secret.
-func (cr *ConfigResolver) GetLoginStateSecret() string {
+// getLoginStateSecret returns the login state secret.
+func (cr *ConfigResolver) getLoginStateSecret() string {
 	if cr.LoginStateSecret != "" {
 		return cr.LoginStateSecret
 	}

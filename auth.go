@@ -34,7 +34,7 @@ func (ac *AuthConfig) WristbandAuth(opts ...AuthOption) (WristbandAuth, error) {
 	// Set up cookie encryption
 	if auth.cookieEncryption == nil {
 		// Use LoginStateSecret if provided, otherwise use ClientSecret
-		key := []byte(resolver.GetLoginStateSecret())
+		key := []byte(resolver.getLoginStateSecret())
 		if len(key) < 32 {
 			// Generate a random key if the secret is too short
 			key = rand.GenerateRandomKey(32)

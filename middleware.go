@@ -2,7 +2,6 @@ package goauth
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
@@ -28,7 +27,6 @@ func SessionFromContext(ctx context.Context) *Session {
 // RefreshTokenIfExpired refreshes the access token if it's expired and
 func (app WristbandApp) RefreshTokenIfExpired(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(res http.ResponseWriter, req *http.Request) {
-		fmt.Println("refresh middleware")
 		// Get session from session manager
 		session, err := app.SessionManager.GetSession(req.Context(), req)
 		if err != nil {
