@@ -16,7 +16,10 @@ import (
 func TestNewConfidentialSigner(t *testing.T) {
 	t.Run("with provided secret key", func(t *testing.T) {
 		secretKey := []byte("test-secret-key-32-bytes-long!!")
-		signer := NewCookieEncryptor(secretKey)
+		signer, err := NewCookieEncryptor(secretKey)
+		if err != nil {
+			t.Fatalf("NewCookieEncryptor failed: %v", err)
+		}
 
 		if string(signer.SecretKey) != string(secretKey) {
 			t.Errorf("Expected SecretKey to match provided key")
@@ -24,7 +27,10 @@ func TestNewConfidentialSigner(t *testing.T) {
 	})
 
 	t.Run("with nil secret key", func(t *testing.T) {
-		signer := NewCookieEncryptor(nil)
+		signer, err := NewCookieEncryptor(nil)
+		if err != nil {
+			t.Fatalf("NewCookieEncryptor failed: %v", err)
+		}
 
 		if len(signer.SecretKey) != 32 {
 			t.Errorf("Expected SecretKey to be 32 bytes, got %d", len(signer.SecretKey))
@@ -237,7 +243,10 @@ func TestReadSigned(t *testing.T) {
 
 func TestWriteEncrypted(t *testing.T) {
 	secretKey := rand.GenerateRandomKey(32)
-	signer := NewCookieEncryptor(secretKey)
+	signer, err := NewCookieEncryptor(secretKey)
+	if err != nil {
+		t.Fatalf("NewCookieEncryptor failed: %v", err)
+	}
 
 	t.Run("successful write", func(t *testing.T) {
 		w := httptest.NewRecorder()
@@ -267,14 +276,17 @@ func TestWriteEncrypted(t *testing.T) {
 	})
 
 	t.Run("invalid secret key", func(t *testing.T) {
-		invalidSigner := NewCookieEncryptor([]byte("short"))
+		invalidSigner, err := NewCookieEncryptor([]byte("short"))
+		if err != nil {
+			t.Fatalf("NewCookieEncryptor failed: %v", err)
+		}
 		w := httptest.NewRecorder()
 		cookie := http.Cookie{
 			Name:  "test",
 			Value: "test-value",
 		}
 
-		err := invalidSigner.WriteEncrypted(w, cookie)
+		err = invalidSigner.WriteEncrypted(w, cookie)
 		if err == nil {
 			t.Error("Expected error for invalid secret key length")
 		}
@@ -283,7 +295,10 @@ func TestWriteEncrypted(t *testing.T) {
 
 func TestReadEncrypted(t *testing.T) {
 	secretKey := rand.GenerateRandomKey(32)
-	signer := NewCookieEncryptor(secretKey)
+	signer, err := NewCookieEncryptor(secretKey)
+	if err != nil {
+		t.Fatalf("NewCookieEncryptor failed: %v", err)
+	}
 
 	t.Run("successful read", func(t *testing.T) {
 		// Use the EncryptCookieValue method which properly base64 encodes
@@ -349,7 +364,10 @@ func TestReadEncrypted(t *testing.T) {
 			Value: encryptedValue,
 		})
 
-		wrongSigner := NewCookieEncryptor(rand.GenerateRandomKey(32))
+		wrongSigner, err := NewCookieEncryptor(rand.GenerateRandomKey(32))
+		if err != nil {
+			t.Fatalf("NewCookieEncryptor failed: %v", err)
+		}
 		_, err = wrongSigner.ReadEncrypted(StandardRequest(req), "test")
 		if !errors.Is(err, ErrInvalidValue) {
 			t.Errorf("Expected ErrInvalidValue for wrong secret key, got %v", err)
@@ -394,7 +412,10 @@ func TestReadEncrypted(t *testing.T) {
 
 func TestCookieRoundTrip(t *testing.T) {
 	secretKey := rand.GenerateRandomKey(32)
-	signer := NewCookieEncryptor(secretKey)
+	signer, err := NewCookieEncryptor(secretKey)
+	if err != nil {
+		t.Fatalf("NewCookieEncryptor failed: %v", err)
+	}
 
 	// Only test basic cookie round trip since WriteCookie doesn't base64 encode
 	// and signed/encrypted cookies don't work properly with the current implementation

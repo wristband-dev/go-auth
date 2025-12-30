@@ -29,30 +29,27 @@ type RequestContext interface {
 }
 
 // NewCookieEncryptor creates a new CookieEncryptor with the provided secret key.
-func NewCookieEncryptor(secretKey []byte) CookieEncryptor {
+func NewCookieEncryptor(secretKey []byte) (CookieEncryptor, error) {
 	if secretKey == nil {
 		secretKey = rand.GenerateRandomKey(32)
+	}
+	encryptor := CookieEncryptor{
+		SecretKey: secretKey,
 	}
 	// Create a new AES cipher block from the secret key.
 	block, err := aes.NewCipher(secretKey)
 	if err != nil {
-		return CookieEncryptor{
-			SecretKey: secretKey,
-		}
+		return encryptor, err
 	}
+	encryptor.block = block
 
 	// Wrap the cipher block in Galois Counter Mode.
 	aesGCM, err := cipher.NewGCM(block)
 	if err != nil {
-		return CookieEncryptor{
-			SecretKey: secretKey,
-		}
+		return encryptor, err
 	}
-	return CookieEncryptor{
-		SecretKey: secretKey,
-		block:     block,
-		aesGCM:    aesGCM,
-	}
+	encryptor.aesGCM = aesGCM
+	return encryptor, nil
 }
 
 // CookieEncryptor is used to read and write encrypted cookie values.

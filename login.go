@@ -265,7 +265,6 @@ func (auth WristbandAuth) HandleCallback(httpCtx HTTPContext) (*CallbackContext,
 
 	loginState, err := GetLoginStateCookie(auth.cookieEncryption, httpCtx)
 	if err != nil {
-		// If
 		return nil, NewRedirectError("failed to retrieve login state", tenantURL)
 	}
 

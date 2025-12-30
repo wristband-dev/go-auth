@@ -42,7 +42,10 @@ func (ac *AuthConfig) WristbandAuth(opts ...AuthOption) (WristbandAuth, error) {
 			// Truncate to 32 bytes if too long
 			key = key[:32]
 		}
-		auth.cookieEncryption = cookies.NewCookieEncryptor(key)
+		auth.cookieEncryption, err = cookies.NewCookieEncryptor(key)
+		if err != nil {
+			return WristbandAuth{}, err
+		}
 	}
 
 	// Set the token URL

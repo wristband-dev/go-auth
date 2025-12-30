@@ -213,20 +213,20 @@ func (cr *ConfigResolver) validatePartialURLAuthConfigs() error {
 }
 
 func (cr *ConfigResolver) validateTenantDomainTokens() error {
-	if cr.ParseTenantFromRootDomain != "" {
+	if cr.GetParseTenantFromRootDomain() != "" {
 		if _, ok := containsTenantPlaceholder(cr.LoginURL); !ok {
 			return fmt.Errorf("the [login_url] must contain the %s when using the [parse_tenant_from_root_domain] config", TenantPlaceholderMessage)
 		}
 		// TODO Finish
 		if _, ok := containsTenantPlaceholder(cr.RedirectURI); !ok {
-			return fmt.Errorf("the [redirect_uri] must contain the %q when using the [parse_tenant_from_root_domain] config", TenantPlaceholderMessage)
+			return fmt.Errorf("the [redirect_uri] must contain the %s when using the [parse_tenant_from_root_domain] config", TenantPlaceholderMessage)
 		}
-	} else if cr.SdkConfiguration != nil {
-		if _, ok := containsTenantPlaceholder(cr.LoginURL); !ok {
-			return fmt.Errorf("the [login_url] cannot contain the %q when the [parse_tenant_from_root_domain] is absent", TenantPlaceholderMessage)
+	} else {
+		if _, ok := containsTenantPlaceholder(cr.LoginURL); ok {
+			return fmt.Errorf("the [login_url] cannot contain the %s when the [parse_tenant_from_root_domain] is absent", TenantPlaceholderMessage)
 		}
-		if _, ok := containsTenantPlaceholder(cr.RedirectURI); !ok {
-			return fmt.Errorf("the [redirect_uri] cannot contain the %q when the [parse_tenant_from_root_domain] is absent", TenantPlaceholderMessage)
+		if _, ok := containsTenantPlaceholder(cr.RedirectURI); ok {
+			return fmt.Errorf("the [redirect_uri] cannot contain the %s when the [parse_tenant_from_root_domain] is absent", TenantPlaceholderMessage)
 		}
 	}
 	return nil

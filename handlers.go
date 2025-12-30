@@ -186,6 +186,7 @@ func (app WristbandApp) LogoutHandler(opts ...LogoutOption) http.HandlerFunc {
 				return
 			}
 			http.Error(res, err.Error(), http.StatusInternalServerError)
+			return
 		}
 
 		logoutCfg := LogoutConfig{
