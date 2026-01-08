@@ -15,7 +15,7 @@ import (
 
 func TestNewConfidentialSigner(t *testing.T) {
 	t.Run("with provided secret key", func(t *testing.T) {
-		secretKey := []byte("test-secret-key-32-bytes-long!!")
+		secretKey := []byte("test-secret-key-32-bytes-long!!!")
 		signer, err := NewCookieEncryptor(secretKey)
 		if err != nil {
 			t.Fatalf("NewCookieEncryptor failed: %v", err)
@@ -276,19 +276,9 @@ func TestWriteEncrypted(t *testing.T) {
 	})
 
 	t.Run("invalid secret key", func(t *testing.T) {
-		invalidSigner, err := NewCookieEncryptor([]byte("short"))
-		if err != nil {
-			t.Fatalf("NewCookieEncryptor failed: %v", err)
-		}
-		w := httptest.NewRecorder()
-		cookie := http.Cookie{
-			Name:  "test",
-			Value: "test-value",
-		}
-
-		err = invalidSigner.WriteEncrypted(w, cookie)
+		_, err := NewCookieEncryptor([]byte("short"))
 		if err == nil {
-			t.Error("Expected error for invalid secret key length")
+			t.Fatalf("expected new NewCookieEncryptor failed")
 		}
 	})
 }
