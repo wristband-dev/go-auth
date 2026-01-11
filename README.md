@@ -47,7 +47,7 @@ Learn more about Wristband's authentication patterns:
 
 > **💡 Learn by Example**
 >
-> Want to see the SDK in action? Check out our [Go demo application](#wristband-multi-tenant-go-demo-app). The demo showcases real-world authentication patterns and best practices.
+> Want to see the SDK in action? Check out our [Go demo application](#wristband-multi-tenant-go-demo-app). The demo showcases a lightweight integration with the SDK.
 
 <br>
 
@@ -271,7 +271,16 @@ func (m *GorillaSessionManager) ClearSession(_ context.Context, w http.ResponseW
 
 ### 3) Add Auth Endpoints
 
-There are <ins>three core API endpoints</ins> your Go server should expose to facilitate both the Login and Logout workflows in Wristband. You may also want to add optional Session and Token endpoints.
+There are **four core API endpoints** your FastAPI server should expose to facilitate authentication workflows in Wristband:
+
+- Login Endpoint
+- Callback Endpoint
+- Logout Endpoint
+- Session Endpoint
+
+You'll need to add these endpoints to your FastAPI routes. There's also one additional endpoint you can implement depending on your authentication needs:
+
+- Token Endpoint (optional)
 
 #### Login Endpoint
 
@@ -313,7 +322,10 @@ http.HandleFunc("/logout", app.LogoutHandler(
 
 #### Session Endpoint
 
-The Session Endpoint returns the current user's session data to the frontend. This is useful for client-side applications that need to display user information or check authentication status.
+> [!NOTE]
+> This endpoint is required for Wristband frontend SDKs to function. For more details, see the [Wristband Session Management documentation](https://docs.wristband.dev/docs/session-management-backend-server).
+
+Wristband frontend SDKs require a Session Endpoint in your backend to verify authentication status and retrieve session metadata. Create a protected session endpoint that uses `session.get_session_response()` to return the session response format expected by Wristband's frontend SDKs. The response model will always have a `user_id` and a `tenant_id` in it. You can include any additional data for your frontend by customizing the `metadata` parameter (optional), which requires JSON-serializable values. **The response must not be cached**.
 
 ```go
 // Session Endpoint - returns session data to the frontend
@@ -493,7 +505,9 @@ app := goauth.NewApp(wristbandAuth, appInput,
 
 <br>
 
-## Auth API (for custom handler implementations)
+## Auth API
+
+This section covers integration with the SDK for custom HTTP handlers instead of the provided ones.
 
 ### Login()
 
