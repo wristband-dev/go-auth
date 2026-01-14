@@ -536,6 +536,120 @@ Initiates the authentication flow by generating an authorization URL and storing
 | string | The authorization URL to redirect the user to.   |
 | error  | Any error that occurred during login initiation. |
 
+#### Which Domains Are Used in the Authorize URL?
+
+Wristband supports multiple tenant domain configurations, including tenant subdomains and tenant custom domains. When the Go SDK constructs the Wristband Authorize URL during `Login()`, it resolves the tenant domain using the following precedence order:
+
+1. `tenant_custom_domain` query parameter: If provided, this takes top priority.
+2. Tenant subdomain in the request host: Used when `AuthConfig.ParseTenantFromRootDomain` is configured and the incoming request host contains a tenant subdomain.
+3. `tenant_name` query parameter: Evaluated when tenant subdomains are not being used.
+4. `WithDefaultTenantCustomDomain(domain string)` login option: Used if none of the above are present.
+5. `WithDefaultTenantName(name string)` login option: Used as the final fallback.
+
+If none of these are specified, `Login()` returns the Application-Level Login (Tenant Discovery) URL (or your configured `CustomApplicationLoginPageURL`), which your login handler should redirect the user to.
+
+#### Tenant Name Query Param
+
+If your application does not wish to utilize tenant subdomains, you can pass the `tenant_name` query parameter to your Login Endpoint and the SDK will use it when generating the Wristband Authorize URL.
+
+```sh
+GET https://yourapp.io/auth/login?tenant_name=customer01
+```
+
+Your `AuthConfig` might look like the following when manually configuring URLs (no tenant subdomains):
+
+```go
+authConfig := goauth.NewAuthConfig(
+    "ic6saso5hzdvbnof3bwgccejxy",
+    "30e9977124b13037d035be10d727806f",
+    "yourapp-yourcompany.us.wristband.dev",
+    goauth.WithAutoConfigureDisabled(
+        "https://yourapp.io/auth/login",
+        "https://yourapp.io/auth/callback",
+    ),
+)
+
+wristbandAuth, err := authConfig.WristbandAuth()
+if err != nil {
+    // handle error
+}
+```
+
+#### Tenant Subdomains
+
+If your application wishes to utilize tenant subdomains, then you do not need to pass a query param when redirecting to your Login Endpoint. The SDK will parse the tenant subdomain from the request host when `AuthConfig.ParseTenantFromRootDomain` is configured. When using tenant subdomains, your configured `login_url` and `redirect_uri` must contain the `{tenant_name}` placeholder.
+
+```sh
+GET https://customer01.yourapp.io/auth/login
+```
+
+Your `AuthConfig` might look like the following when manually configuring URLs for tenant subdomains:
+
+```go
+authConfig := goauth.NewAuthConfig(
+    "ic6saso5hzdvbnof3bwgccejxy",
+    "30e9977124b13037d035be10d727806f",
+    "yourapp-yourcompany.us.wristband.dev",
+    goauth.WithParseTenantFromRootDomain("yourapp.io"),
+    goauth.WithAutoConfigureDisabled(
+        "https://{tenant_name}.yourapp.io/auth/login",
+        "https://{tenant_name}.yourapp.io/auth/callback",
+    ),
+)
+
+wristbandAuth, err := authConfig.WristbandAuth()
+if err != nil {
+    // handle error
+}
+```
+
+#### Default Tenant Name
+
+For certain use cases, it may be useful to specify a default tenant name in the event that `Login()` cannot resolve a tenant name in either the request query parameters or the URL subdomain. You can specify a fallback default tenant name via `WithDefaultTenantName(...)`:
+
+```go
+http.HandleFunc("/auth/login", app.LoginHandler(
+    goauth.WithDefaultTenantName("default"),
+))
+```
+
+#### Tenant Custom Domain Query Param
+
+If your application wishes to utilize tenant custom domains, you can pass the `tenant_custom_domain` query parameter to your Login Endpoint, and the SDK will be able to make the appropriate redirection to the Wristband Authorize Endpoint.
+
+```sh
+GET https://yourapp.io/auth/login?tenant_custom_domain=mytenant.com
+```
+
+The tenant custom domain takes precedence over all other possible domains else when present.
+
+#### Default Tenant Custom Domain
+
+For certain use cases, it may be useful to specify a default tenant custom domain in the event that `Login()` cannot find a tenant custom domain in the query parameters. You can specify a fallback default tenant custom domain via `WithDefaultTenantCustomDomain(...)`:
+
+```go
+http.HandleFunc("/auth/login", app.LoginHandler(
+    goauth.WithDefaultTenantCustomDomain("mytenant.com"),
+))
+```
+
+The default tenant custom domain takes precedence over all other possible domain configurations when present except for the case where the `tenant_custom_domain` query parameter exists in the request.
+
+#### Custom State
+
+Before your Login Endpoint redirects to Wristband, it will create a Login State Cookie to cache all necessary data required in the Callback Endpoint. You can inject additional state into that cookie by setting `LoginOptions.CustomState`:
+
+```go
+http.HandleFunc("/auth/login", app.LoginHandler(
+    func(o *goauth.LoginOptions) {
+        o.CustomState = map[string]any{"test": "abc"}
+    },
+))
+```
+
+> [!WARNING]
+> Injecting custom state is an advanced feature, and it is recommended to use `customState` sparingly. Most applications may not need it at all. The max cookie size is 4kB. From our own tests, passing a `customState` JSON of at most 1kB should be a safe ceiling.
+
 **Example**
 
 ```go
