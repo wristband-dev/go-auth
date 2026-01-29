@@ -253,8 +253,8 @@ func TestWristbandApp_HTTPContext(t *testing.T) {
 	app := WristbandApp{
 		WristbandAuth: WristbandAuth{
 			cookieEncryption: cookieEncryption,
+			cookieOptions:    cookieOpts,
 		},
-		cookieOpts: cookieOpts,
 	}
 
 	req := httptest.NewRequest("GET", "http://example.com/test", nil)
