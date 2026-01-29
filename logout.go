@@ -9,10 +9,19 @@ import (
 
 // LogoutConfig is the configuration for the logout flow.
 type LogoutConfig struct {
-	RedirectURL        string
-	State              string
-	TenantCustomDomain string
-	TenantName         string
+	redirectURL        string
+	state              string
+	tenantCustomDomain string
+	tenantName         string
+}
+
+// NewLogoutConfig constructs the LogoutConfig.
+func NewLogoutConfig(opts ...LogoutOption) LogoutConfig {
+	cfg := LogoutConfig{}
+	for _, opt := range opts {
+		opt.apply(&cfg)
+	}
+	return cfg
 }
 
 // LogoutOption is an option for the logout flow.
@@ -23,59 +32,71 @@ type LogoutOption interface {
 // LogoutOptionFunc is a function that implements the LogoutOption interface.
 type LogoutOptionFunc func(*LogoutConfig)
 
-func (f LogoutOptionFunc) apply(options *LogoutConfig) {
-	f(options)
+func (f LogoutOptionFunc) apply(config *LogoutConfig) {
+	f(config)
 }
 
 // WithRedirectURL sets the redirect URL used for the logout flow
 func WithRedirectURL(redirectURL string) LogoutOption {
 	return LogoutOptionFunc(func(config *LogoutConfig) {
-		config.RedirectURL = redirectURL
+		config.redirectURL = redirectURL
 	})
 }
 
 // WithState is used to set the state query parameter in the logout
 func WithState(state string) LogoutOption {
 	return LogoutOptionFunc(func(config *LogoutConfig) {
-		config.State = state
+		config.state = state
 	})
 }
 
 // WithTenantCustomDomain sets the tenant custom domain.
 func WithTenantCustomDomain(tenantDomain string) LogoutOption {
 	return LogoutOptionFunc(func(config *LogoutConfig) {
-		config.TenantCustomDomain = tenantDomain
+		config.tenantCustomDomain = tenantDomain
 	})
 }
 
 // WithTenantName sets the tenant name.
 func WithTenantName(tenantName string) LogoutOption {
 	return LogoutOptionFunc(func(config *LogoutConfig) {
-		config.TenantName = tenantName
+		config.tenantName = tenantName
+	})
+}
+
+// WithSession sets the TenantName and TenantCustomDomain using the Session's values if the current config's values are empty.
+func WithSession(session Session) LogoutOption {
+	return LogoutOptionFunc(func(config *LogoutConfig) {
+		if config.tenantCustomDomain == "" {
+			config.tenantCustomDomain = session.CustomTenantDomain
+		}
+		if config.tenantName == "" {
+			config.tenantName = session.TenantName
+		}
 	})
 }
 
 // LogoutURL builds the logout URL for redirecting to Wristband
-func (auth WristbandAuth) LogoutURL(req HTTPRequest, config LogoutConfig) (string, error) {
-	if len(config.State) > 512 {
+func (auth WristbandAuth) LogoutURL(req RequestURI, config LogoutConfig) (string, error) {
+	if len(config.state) > 512 {
 		return "", fmt.Errorf("the [state] logout config cannot exceed 512 characters")
 	}
 
 	params := url.Values{}
 	params.Set("client_id", auth.Client.ClientID)
 
-	if config.RedirectURL != "" {
-		params.Set("redirect_url", config.RedirectURL)
+	if config.redirectURL != "" {
+		params.Set("redirect_url", config.redirectURL)
 	}
-	if config.State != "" {
-		params.Set("state", config.State)
+	if config.state != "" {
+		params.Set("state", config.state)
 	}
 
 	host, err := auth.logoutHost(req, config)
 	if err != nil {
 		if errors.Is(err, ErrTenantNameNotFound) {
-			if config.RedirectURL != "" {
-				return config.RedirectURL, nil
+			if config.redirectURL != "" {
+				return config.redirectURL, nil
 			}
 			if customLogin, err := auth.configResolver.GetCustomApplicationLoginPageURL(); err == nil {
 				if customLogin != "" {
@@ -93,12 +114,12 @@ func (auth WristbandAuth) LogoutURL(req HTTPRequest, config LogoutConfig) (strin
 // ErrTenantNameNotFound is returned when no tenant name can be resolved.
 var ErrTenantNameNotFound = fmt.Errorf("no tenant name resolvable")
 
-func (auth WristbandAuth) logoutHost(req HTTPRequest, options LogoutConfig) (string, error) {
-	if options.TenantCustomDomain != "" {
-		return options.TenantCustomDomain, nil
+func (auth WristbandAuth) logoutHost(req RequestURI, options LogoutConfig) (string, error) {
+	if options.tenantCustomDomain != "" {
+		return options.tenantCustomDomain, nil
 	}
-	if options.TenantName != "" {
-		return strings.Join([]string{options.TenantName, auth.configResolver.WristbandApplicationVanityDomain}, auth.separator()), nil
+	if options.tenantName != "" {
+		return strings.Join([]string{options.tenantName, auth.configResolver.WristbandApplicationVanityDomain}, auth.separator()), nil
 	}
 	if customTenantName, ok := auth.RequestCustomTenantName(req); ok {
 		return customTenantName, nil

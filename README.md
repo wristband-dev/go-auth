@@ -128,7 +128,6 @@ func main() {
 		ClientID:                         "your-client-id",
 		ClientSecret:                     "your-client-secret",
 		WristbandApplicationVanityDomain: "your-app.wristband.dev",
-		AutoConfigureEnabled:             true, // Enable auto-configuration (default)
 	}
 
 	// Create the Wristband auth instance
@@ -288,10 +287,7 @@ The goal of the Login Endpoint is to initiate an auth request by redirecting to 
 
 ```go
 // Create the Wristband app with your session manager and callback URL
-app := goauth.NewApp(wristbandAuth, goauth.AppInput{
-    CallbackURL:    "https://your-app.com/callback",
-    SessionManager: sessionManager,
-})
+app := wristbandAuth.NewApp(sessionManager)
 
 // Login Endpoint - initiates the auth request and redirects to Wristband
 http.HandleFunc("/login", app.LoginHandler(
@@ -299,6 +295,10 @@ http.HandleFunc("/login", app.LoginHandler(
     goauth.WithDefaultTenantName("default-tenant"),
 ))
 ```
+
+**Options**
+
+Optional configuration can be provided using various `LoginOpt` functions. Refer to the [Login](#LoginOptions) section for more details.
 
 #### Callback Endpoint
 
@@ -320,6 +320,11 @@ http.HandleFunc("/logout", app.LogoutHandler(
 ))
 ```
 
+**Options**
+
+Optional configuration can be provided using various `LogoutOption` functions. Refer to the [Logout API](#LogoutConfig) section for more details.
+
+
 #### Session Endpoint
 
 > [!NOTE]
@@ -329,24 +334,7 @@ Wristband frontend SDKs require a Session Endpoint in your backend to verify aut
 
 ```go
 // Session Endpoint - returns session data to the frontend
-http.HandleFunc("/api/session", func(w http.ResponseWriter, r *http.Request) {
-    session := goauth.SessionFromContext(r.Context())
-    if session == nil {
-        http.Error(w, "Unauthorized", http.StatusUnauthorized)
-        return
-    }
-
-    // Return session data (customize based on your needs)
-    response := map[string]interface{}{
-        "userId":       session.UserID,
-        "tenantId":     session.TenantID,
-        "email":        session.Email,
-        "isAuthenticated": true,
-    }
-
-    w.Header().Set("Content-Type", "application/json")
-    json.NewEncoder(w).Encode(response)
-})
+http.HandleFunc("/api/session", app.SessionHandler())
 ```
 
 #### Token Endpoint (Optional)
@@ -383,7 +371,7 @@ Create middleware to protect your APIs and handle token refresh:
 
 ```go
 // Use built-in middleware to require auth and auto-refresh access tokens
-protected := app.RequireAuthentication(app.RefreshTokenIfExpired(http.HandlerFunc(protectedHandler)))
+protected := app.RequireAuthentication(app.RefreshTokenIfExpired(protectedHandler))
 http.Handle("/api/protected", protected)
 ```
 
@@ -493,7 +481,7 @@ The `WristbandAuth()` method accepts the following optional parameters:
 Configure cookie options for session storage:
 
 ```go
-app := goauth.NewApp(wristbandAuth, appInput,
+app := wristbandAuth.NewApp(sessionManager,
     goauth.WithCookieOptions(goauth.CookieOptions{
         Domain: ".yourapp.com",
         Path:   "/",
@@ -507,34 +495,47 @@ app := goauth.NewApp(wristbandAuth, appInput,
 
 ## Auth API
 
-This section covers integration with the SDK for custom HTTP handlers instead of the provided ones.
+This section covers integration with the SDK for custom HTTP handlers instead of the provided ones. It can also be used when working with a web framework.
 
-### Login()
+### Common Interfaces
 
-Initiates the authentication flow by generating an authorization URL and storing login state in a cookie.
+There are some abstractions around http requests and responses to enable integration with various web frameworks. Implementations are provided for the standard library which are used in the Wristband provided `http.Handler` implementations.
+
+They are abstracted away using the `HTTPContext` interface. This interface is used to:
+- Read URI information using the 
+- Listing request cookie names and retrieving a request cookie via the `cookies.CookieRequest` interface.
+- Writing response cookies.
+
+### HandleLogin
+
+`WristbandAuth.HandleLogin` initiates the authentication flow by generating an authorization URL and storing login state in a cookie. Refer to [LoginHandler](handlers.go) for an example.
 
 **Parameters**
 
-| Parameter | Type                | Required | Description                                |
-|-----------|---------------------|----------|--------------------------------------------|
-| w         | http.ResponseWriter | Yes      | The HTTP response writer.                  |
-| r         | *http.Request       | Yes      | The HTTP request.                          |
-| options   | ...LoginOption      | No       | Optional configuration for the login flow. |
-
-**Options**
-
-| Option                                         | Description                                    |
-|------------------------------------------------|------------------------------------------------|
-| `WithDefaultTenantName(name string)`           | Sets a default tenant name for login.          |
-| `WithDefaultTenantDomain(domain string)`       | Sets a default tenant domain for login.        |
-| `WithDefaultTenantCustomDomain(domain string)` | Sets a default tenant custom domain for login. |
+| Parameter | Type         | Required | Description                                |
+|-----------|--------------|----------|--------------------------------------------|
+| httpCtx   | HTTPContext  | Yes      | The HTTP request/response context          |
+| options   | *LoginOption | Yes      | Optional configuration for the login flow. |
 
 **Returns**
 
-| Type   | Description                                      |
-|--------|--------------------------------------------------|
-| string | The authorization URL to redirect the user to.   |
-| error  | Any error that occurred during login initiation. |
+| Type   | Description                                                                   |
+|--------|-------------------------------------------------------------------------------|
+| string | The authorization url to redirect to with the necessary query parameters set. |
+| error  | Any error that occurred during login flow.                                    |
+
+#### LoginOptions
+
+These are all optional configurations to be used for building the authorize request URL. The `LoginOpt` interface provides the ability to set these configurations. 
+
+| Option                          | Description                                                                                                                                      |
+|---------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------|
+| `WithCustomState`               | Custom state data for the login request..                                                                                                        |
+| `WithReturnURL`                 | URL to return to after authentication is completed. If a value is provided, then it takes precedence over the return_url request query parameter |
+| `WithDefaultTenantCustomDomain` | Tenant custom domain for the login request if the name cannot be found in either the subdomain or the "tenant_custom_domain" query parameter.    |
+| `WithDefaultTenantName`         | Tenant name for the login request if the name cannot be found in either the subdomain or the "tenant_name" query parameter                       |
+
+Use the `NewLoginOptions` function to initialize the configuration to be provided to `HandleLogin`. 
 
 #### Which Domains Are Used in the Authorize URL?
 
@@ -605,7 +606,7 @@ if err != nil {
 
 #### Default Tenant Name
 
-For certain use cases, it may be useful to specify a default tenant name in the event that `Login()` cannot resolve a tenant name in either the request query parameters or the URL subdomain. You can specify a fallback default tenant name via `WithDefaultTenantName(...)`:
+For certain use cases, it may be useful to specify a default tenant name in the event that `HandleLogin` cannot resolve a tenant name in either the request query parameters or the URL subdomain. You can specify a fallback default tenant name via `WithDefaultTenantName(...)`:
 
 ```go
 http.HandleFunc("/auth/login", app.LoginHandler(
@@ -625,7 +626,7 @@ The tenant custom domain takes precedence over all other possible domains else w
 
 #### Default Tenant Custom Domain
 
-For certain use cases, it may be useful to specify a default tenant custom domain in the event that `Login()` cannot find a tenant custom domain in the query parameters. You can specify a fallback default tenant custom domain via `WithDefaultTenantCustomDomain(...)`:
+For certain use cases, it may be useful to specify a default tenant custom domain in the event that `HandleLogin` cannot find a tenant custom domain in the query parameters. You can specify a fallback default tenant custom domain via `WithDefaultTenantCustomDomain(...)`:
 
 ```go
 http.HandleFunc("/auth/login", app.LoginHandler(
@@ -640,11 +641,7 @@ The default tenant custom domain takes precedence over all other possible domain
 Before your Login Endpoint redirects to Wristband, it will create a Login State Cookie to cache all necessary data required in the Callback Endpoint. You can inject additional state into that cookie by setting `LoginOptions.CustomState`:
 
 ```go
-http.HandleFunc("/auth/login", app.LoginHandler(
-    func(o *goauth.LoginOptions) {
-        o.CustomState = map[string]any{"test": "abc"}
-    },
-))
+http.HandleFunc("/auth/login", app.LoginHandler(goauth.WithCustomState(map[string]any{"test": "abc"}))
 ```
 
 > [!WARNING]
@@ -667,34 +664,34 @@ http.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
 
 <br>
 
-### Callback()
+### HandleCallback
 
 Handles the OAuth callback from Wristband, exchanges the authorization code for tokens, and retrieves user information.
 
 **Parameters**
 
-| Parameter | Type                | Required | Description                                          |
-|-----------|---------------------|----------|------------------------------------------------------|
-| w         | http.ResponseWriter | Yes      | The HTTP response writer.                            |
-| r         | *http.Request       | Yes      | The HTTP request containing the callback parameters. |
+| Parameter | Type         | Required | Description                                |
+|-----------|--------------|----------|--------------------------------------------|
+| httpCtx   | HTTPContext  | Yes      | The HTTP request/response context          |
 
 **Returns**
 
 | Type            | Description                                         |
 |-----------------|-----------------------------------------------------|
-| *CallbackResult | Contains tokens, user info, and redirect URL.       |
+| *CallbackContext | Contains tokens, user info, and redirect URL.       |
 | error           | Any error that occurred during callback processing. |
 
-**CallbackResult Fields**
+When an error is returned, use `goauth.IsRedirectError` in case the request should be redirected. If so, log the error and redirect. 
 
-| Field        | Type      | Description                                            |
-|--------------|-----------|--------------------------------------------------------|
-| AccessToken  | string    | The access token for API calls.                        |
-| RefreshToken | string    | The refresh token for obtaining new access tokens.     |
-| ExpiresAt    | int64     | Unix timestamp when the access token expires.          |
-| UserInfo     | *UserInfo | User information from the Wristband Userinfo endpoint. |
-| TenantID     | string    | The tenant ID for the authenticated user.              |
-| RedirectURL  | string    | The URL to redirect the user to after authentication.  |
+**CallbackContext Fields**
+
+| Field              | Type             | Description                                                 |
+|--------------------|------------------|-------------------------------------------------------------|
+| TokenResponse      | TokenResponse    | OAuth tokens (access, refresh, ID tokens, and expiration).  |
+| LoginState         | LoginState       | Login context (return URL, nonce, code verifier, state).    |
+| UserInfo           | UserInfoResponse | User information from the Wristband Userinfo endpoint.      |
+| TenantName         | string           | The tenant name for the authenticated user.                 |
+| CustomTenantDomain | string           | Custom domain for the tenant.                               |
 
 **Example**
 
@@ -702,6 +699,10 @@ Handles the OAuth callback from Wristband, exchanges the authorization code for 
 http.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
     result, err := wristbandAuth.Callback(w, r)
     if err != nil {
+		// Check for redirection.
+        if redirectError, ok := goauth.IsRedirectError(err); ok {
+            http.Redirect(res, req, redirectError.URL, http.StatusSeeOther)
+        }
         http.Error(w, "Callback failed", http.StatusInternalServerError)
         return
     }
@@ -721,25 +722,16 @@ http.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
 
 <br>
 
-### Logout()
+### LogoutURL
 
-Revokes the refresh token and generates a logout URL for the Wristband logout endpoint.
+Generates a logout URL for the Wristband logout endpoint.
 
 **Parameters**
 
-| Parameter    | Type            | Required | Description                                 |
-|--------------|-----------------|----------|---------------------------------------------|
-| refreshToken | string          | Yes      | The refresh token to revoke.                |
-| options      | ...LogoutOption | No       | Optional configuration for the logout flow. |
-
-**Options**
-
-
-| Option                                  | Description                               |
-|-----------------------------------------|-------------------------------------------|
-| `WithRedirectURL(url string)`           | Sets the URL to redirect to after logout. |
-| `WithTenantDomain(domain string)`       | Sets the tenant domain for logout.        |
-| `WithTenantCustomDomain(domain string)` | Sets the tenant custom domain for logout. |
+| Parameter | Type         | Required | Description                                 |
+|-----------|--------------|----------|---------------------------------------------|
+| req       | RequestURI   | Yes      | The HTTP request URI context                |
+| options   | LogoutConfig | Yes      | Optional configuration for the logout flow. |
 
 **Returns**
 
@@ -747,6 +739,17 @@ Revokes the refresh token and generates a logout URL for the Wristband logout en
 |--------|-----------------------------------------|
 | string | The logout URL to redirect the user to. |
 | error  | Any error that occurred during logout.  |
+
+
+#### LogoutConfig
+
+The `LogoutConfig` can be configured using `NewLogoutConfig` and providing any desired `LogoutOption` configurations.
+
+| Option                                  | Description                               |
+|-----------------------------------------|-------------------------------------------|
+| `WithRedirectURL(url string)`           | Sets the URL to redirect to after logout. |
+| `WithTenantDomain(domain string)`       | Sets the tenant domain for logout.        |
+| `WithTenantCustomDomain(domain string)` | Sets the tenant custom domain for logout. |
 
 **Example**
 
@@ -757,19 +760,42 @@ http.HandleFunc("/logout", func(w http.ResponseWriter, r *http.Request) {
         http.Redirect(w, r, "/", http.StatusFound)
         return
     }
+	httpCtx := wristbandAuth.NewStandardHttpContext(w, r)
 
-    logoutURL, err := wristbandAuth.Logout(session.RefreshToken,
-        goauth.WithRedirectURL("/goodbye"),
-    )
+    logoutURL, err := wristbandAuth.LogoutURL(httpCtx, NewLogoutConfig())
     if err != nil {
         http.Error(w, "Logout failed", http.StatusInternalServerError)
         return
     }
 
+	// Revoke token as necessary
+    if session.RefreshToken != "" {
+        _ = wristbandAuth.RevokeToken(session.RefreshToken, goauth.RefreshTokenType)
+	}
+
     sessionManager.ClearSession(r.Context(), w, r)
     http.Redirect(w, r, logoutURL, http.StatusFound)
 })
 ```
+
+<br>
+
+### RevokeToken
+
+Revokes the refresh token.
+
+**Parameters**
+
+| Parameter | Type   | Required | Description       |
+|-----------|--------|----------|-------------------|
+| token     | string | Yes      | The token value   |
+| tokenType | string | Yes      | The type of token |
+
+**Returns**
+
+| Type   | Description                                    |
+|--------|------------------------------------------------|
+| error  | Any error that occurred during revoke request. |
 
 <br>
 
@@ -796,8 +822,11 @@ Checks if the access token is expired (or about to expire based on `TokenExpirat
 | Field        | Type   | Description                                       |
 |--------------|--------|---------------------------------------------------|
 | AccessToken  | string | The new access token.                             |
+| TokenType    | string | The token type (e.g., "Bearer").                  |
 | RefreshToken | string | The new refresh token (if rotated).               |
-| ExpiresAt    | int64  | Unix timestamp when the new access token expires. |
+| IDToken      | string | The ID token containing user identity claims.     |
+| ExpiresIn    | int    | Token lifetime in seconds.                        |
+
 
 **Example**
 

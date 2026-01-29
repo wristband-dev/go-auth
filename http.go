@@ -7,8 +7,8 @@ import (
 )
 
 type (
-	// HTTPRequest represents an HTTP request.
-	HTTPRequest interface {
+	// RequestURI represents an HTTP request's URI.
+	RequestURI interface {
 		// Query returns a QueryValueResolver that can be used to access query parameters of the request.
 		Query() QueryValueResolver
 		// Host returns the host of the request.
@@ -30,6 +30,16 @@ type (
 		Host() string
 	}
 )
+
+// NewStandardHttpContext returns the HTTPContext for the standard library http types.
+func (auth WristbandAuth) NewStandardHttpContext(w http.ResponseWriter, r *http.Request) *StandardHTTP {
+	return &StandardHTTP{
+		req:              r,
+		res:              w,
+		cookieOpts:       auth.defaultCookieOptions(),
+		cookieEncryption: auth.cookieEncryption,
+	}
+}
 
 // StandardHTTP implements the HTTPContext interface for standard library HTTP requests and responses.
 type StandardHTTP struct {

@@ -73,6 +73,8 @@ type WristbandAuth struct {
 
 	// ConfigResolver provides dynamic configuration resolution
 	configResolver *ConfigResolver
+
+	cookieOptions CookieOptions
 }
 
 // UserInfoEndpoint returns the user info endpoint URL for fetching user details.
@@ -98,6 +100,19 @@ func (auth WristbandAuth) RevokeEndpoint() string {
 	return auth.endpointRoot + auth.revokeEndpoint
 }
 
+func (auth WristbandAuth) defaultCookieOptions() CookieOptions {
+	dangerouslyDisableSecureCookies := false
+	if auth.configResolver != nil {
+		dangerouslyDisableSecureCookies = auth.configResolver.GetDangerouslyDisableSecureCookies()
+	}
+	return CookieOptions{
+		Path:                            "/",
+		SameSite:                        http.SameSiteLaxMode,
+		MaxAge:                          3600,
+		DangerouslyDisableSecureCookies: dangerouslyDisableSecureCookies,
+	}
+}
+
 // AuthOption is an interface for options that can be applied to modify the WristbandAuth configuration.
 type AuthOption interface {
 	apply(*WristbandAuth)
@@ -107,6 +122,13 @@ type AuthOption interface {
 func WithHTTPClient(client *http.Client) AuthOption {
 	return authOptionFunc(func(c *WristbandAuth) {
 		c.httpClient = client
+	})
+}
+
+// WithCookieOptions sets the cookie configuration for the app.
+func WithCookieOptions(cookieOptions CookieOptions) AuthOption {
+	return authOptionFunc(func(c *WristbandAuth) {
+		c.cookieOptions = cookieOptions
 	})
 }
 

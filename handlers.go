@@ -40,42 +40,22 @@ type (
 	}
 )
 
-// AppInput is the input structure for configuring the WristbandApp.
-type AppInput struct {
-	SessionManager           SessionManager
-	SessionMetadataExtractor func(Session) any
-}
-
-// NewApp returns a new WristbandApp instance with the provided configuration.
-func NewApp(auth WristbandAuth, input AppInput, opts ...AppOption) WristbandApp {
-	app := &WristbandApp{
-		WristbandAuth:            auth,
-		SessionManager:           input.SessionManager,
-		sessionMetadataExtractor: input.SessionMetadataExtractor,
-		cookieOpts: CookieOptions{
-			Path:                            "/",
-			SameSite:                        http.SameSiteLaxMode,
-			MaxAge:                          3600,
-			DangerouslyDisableSecureCookies: true,
-		},
+// NewApp returns a new WristbandApp to use the default http.Handler endpoint implementations.
+func (auth WristbandAuth) NewApp(sessionMgr SessionManager, opts ...AppOption) WristbandApp {
+	app := WristbandApp{
+		WristbandAuth:  auth,
+		SessionManager: sessionMgr,
 	}
 	for _, opt := range opts {
-		opt.apply(app)
+		opt.apply(&app)
 	}
 
-	return *app
+	return app
 }
 
-// AppOption is an interface for options that can be applied to modify the WristbandApp configuration.
+// AppOption is an interface for options that can be applied to modify the WristbandApp configuration. Unused for now.
 type AppOption interface {
 	apply(*WristbandApp)
-}
-
-// WithCookieOptions sets the cookie configuration for the app.
-func WithCookieOptions(cookieOpts CookieOptions) AppOption {
-	return appOptionFunc(func(c *WristbandApp) {
-		c.cookieOpts = cookieOpts
-	})
 }
 
 type appOptionFunc func(*WristbandApp)
@@ -84,12 +64,11 @@ func (f appOptionFunc) apply(c *WristbandApp) {
 	f(c)
 }
 
-// WristbandApp extends the WristbandAuth with additional standard library http.Handler functionality.
+// WristbandApp extends the WristbandAuth by providing http.Handler implementations for the necessary Wristband Endpoints.
+// It requires a SessionManager.
 type WristbandApp struct {
 	WristbandAuth
-	SessionManager           SessionManager
-	cookieOpts               CookieOptions
-	sessionMetadataExtractor func(Session) any
+	SessionManager SessionManager
 }
 
 // HTTPContext creates a new HTTPContext for the standard library request and response.
@@ -97,17 +76,14 @@ func (app WristbandApp) HTTPContext(res http.ResponseWriter, req *http.Request) 
 	return &StandardHTTP{
 		req:              req,
 		res:              res,
-		cookieOpts:       app.cookieOpts,
+		cookieOpts:       app.cookieOptions,
 		cookieEncryption: app.cookieEncryption,
 	}
 }
 
 // LoginHandler creates a middleware for initiating a login request
-func (app WristbandApp) LoginHandler(opts ...func(*LoginOptions)) http.HandlerFunc {
-	options := DefaultLoginOptions()
-	for _, opt := range opts {
-		opt(options)
-	}
+func (app WristbandApp) LoginHandler(opts ...LoginOpt) http.HandlerFunc {
+	options := NewLoginOptions(opts...)
 
 	return func(res http.ResponseWriter, req *http.Request) {
 		httpCtx := app.HTTPContext(res, req)
@@ -180,7 +156,7 @@ func (app WristbandApp) LogoutHandler(opts ...LogoutOption) http.HandlerFunc {
 		// Get session from session manager
 		session, err := app.SessionManager.GetSession(ctx, req)
 		if err != nil {
-			if url, err := app.LogoutURL(httpContext, LogoutConfig{}); err == nil {
+			if url, err := app.LogoutURL(httpContext, NewLogoutConfig()); err == nil {
 				// If no session, just redirect to Wristband logout
 				http.Redirect(res, req, url, http.StatusFound)
 				return
@@ -189,13 +165,7 @@ func (app WristbandApp) LogoutHandler(opts ...LogoutOption) http.HandlerFunc {
 			return
 		}
 
-		logoutCfg := LogoutConfig{
-			TenantName:         session.TenantName,
-			TenantCustomDomain: session.CustomTenantDomain,
-		}
-		for _, opt := range opts {
-			opt.apply(&logoutCfg)
-		}
+		logoutCfg := NewLogoutConfig(append([]LogoutOption{WithSession(*session)}, opts...)...)
 
 		url, err := app.LogoutURL(httpContext, logoutCfg)
 		if err != nil {
@@ -204,7 +174,7 @@ func (app WristbandApp) LogoutHandler(opts ...LogoutOption) http.HandlerFunc {
 
 		// Try to revoke refresh token
 		if session.RefreshToken != "" {
-			_ = app.RevokeToken(session.RefreshToken, "refresh_token")
+			_ = app.RevokeToken(session.RefreshToken, RefreshTokenType)
 		}
 
 		// Clear session
@@ -225,8 +195,37 @@ type SessionResponse struct {
 	Metadata any    `json:"metadata"`
 }
 
+// SessionHandlerConfig is the configuration for the SessionHandler.
+type SessionHandlerConfig struct {
+	sessionMetadataExtractor func(Session) any
+}
+
+// SessionHandlerOption is an interface for options that can be applied to modify the SessionHandler configuration.
+type SessionHandlerOption interface {
+	apply(*SessionHandlerConfig)
+}
+
+// sessionHandlerOptionFunc is a function that sets configuration options for the SessionHandler.
+type sessionHandlerOptionFunc func(*SessionHandlerConfig)
+
+func (fn sessionHandlerOptionFunc) apply(c *SessionHandlerConfig) {
+	fn(c)
+}
+
+// WithSessionMetadataExtractor sets the function that is used to set the metadata returned by the Session handler.
+func WithSessionMetadataExtractor(metadataFn func(Session) any) SessionHandlerOption {
+	return sessionHandlerOptionFunc(func(c *SessionHandlerConfig) {
+		c.sessionMetadataExtractor = metadataFn
+	})
+}
+
 // SessionHandler is an http.HandlerFunc that retrieves the current user session.
-func (app WristbandApp) SessionHandler() http.HandlerFunc {
+func (app WristbandApp) SessionHandler(opts ...SessionHandlerOption) http.HandlerFunc {
+	cfg := SessionHandlerConfig{}
+	for _, opt := range opts {
+		opt.apply(&cfg)
+	}
+
 	return func(res http.ResponseWriter, req *http.Request) {
 		session, err := app.SessionManager.GetSession(req.Context(), req)
 		if err != nil {
@@ -238,8 +237,8 @@ func (app WristbandApp) SessionHandler() http.HandlerFunc {
 			UserID:   session.UserID,
 			TenantID: session.TenantID,
 		}
-		if app.sessionMetadataExtractor != nil {
-			resp.Metadata = app.sessionMetadataExtractor(*session)
+		if cfg.sessionMetadataExtractor != nil {
+			resp.Metadata = cfg.sessionMetadataExtractor(*session)
 		} else {
 			resp.Metadata = session.UserInfo
 		}

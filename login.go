@@ -13,53 +13,79 @@ import (
 	"github.com/wristband-dev/go-auth/rand"
 )
 
-// LoginState represents the state during login process
-type LoginState struct {
-	ReturnURL      string `json:"return_url,omitempty"`
-	Nonce          string `json:"nonce,omitempty"`
-	CodeVerifier   string `json:"code_verifier,omitempty"`
-	CustomState    any    `json:"custom_state,omitempty"`
-	StateCookieKey string `json:"-"`
-	CreatedAt      int64  `json:"created_at,omitempty"`
-}
+type (
+	// LoginState represents the state during login process
+	LoginState struct {
+		ReturnURL      string `json:"return_url,omitempty"`
+		Nonce          string `json:"nonce,omitempty"`
+		CodeVerifier   string `json:"code_verifier,omitempty"`
+		CustomState    any    `json:"custom_state,omitempty"`
+		StateCookieKey string `json:"-"`
+		CreatedAt      int64  `json:"created_at,omitempty"`
+	}
 
-// LoginOptions represents options for the login process
-type LoginOptions struct {
-	// CustomState data for the login request.
-	CustomState map[string]any
-	// ReturnURL is the URL to return to after authentication is completed.
-	// If a value is provided, then it takes precedence over the return_url request query parameter.
-	ReturnURL string
+	// LoginOptions represents options for the login process
+	LoginOptions struct {
+		// customState data for the login request.
+		customState map[string]any
+		// returnURL is the URL to return to after authentication is completed.
+		// If a value is provided, then it takes precedence over the return_url request query parameter.
+		returnURL string
 
-	// DefaultTenantCustomDomain is an optional default tenant custom domain to use for the
-	// login request in the event the tenant custom domain cannot be found in the
-	// "tenant_custom_domain" request query parameter.
-	DefaultTenantCustomDomain string
-	// DefaultTenantName is an optional default tenant custom domain to use for the login request in the
-	// event the name cannot be found in either the subdomain or the "tenant_name" request
-	// query parameter (depending on your subdomain configuration).
-	DefaultTenantName string
+		// defaultTenantCustomDomain is an optional default tenant custom domain to use for the
+		// login request in the event the tenant custom domain cannot be found in the
+		// "tenant_custom_domain" request query parameter.
+		defaultTenantCustomDomain string
+		// defaultTenantName is an optional default tenant name to use for the login request in the
+		// event the name cannot be found in either the subdomain or the "tenant_name" request
+		// query parameter (depending on your subdomain configuration).
+		defaultTenantName string
 
-	AuthorizeRequestOpts []AuthorizeRequestOption
-}
+		authorizeRequestOpts []AuthorizeRequestOption
+	}
+
+	// LoginOpt is used to modify LoginOptions configuration.
+	LoginOpt interface {
+		apply(*LoginOptions)
+	}
+)
 
 // WithDefaultTenantCustomDomain sets the default tenant custom domain used for logins.
-func WithDefaultTenantCustomDomain(domain string) func(*LoginOptions) {
-	return func(o *LoginOptions) {
-		o.DefaultTenantCustomDomain = domain
-	}
+func WithDefaultTenantCustomDomain(domain string) LoginOpt {
+	return loginOptFn(func(o *LoginOptions) {
+		o.defaultTenantCustomDomain = domain
+	})
 }
 
 // WithDefaultTenantName sets the default tenant name that should be used for logins.
-func WithDefaultTenantName(name string) func(*LoginOptions) {
-	return func(o *LoginOptions) {
-		o.DefaultTenantName = name
-	}
+func WithDefaultTenantName(name string) LoginOpt {
+	return loginOptFn(func(o *LoginOptions) {
+		o.defaultTenantName = name
+	})
 }
 
-// DefaultLoginOptions returns default login options
-func DefaultLoginOptions() *LoginOptions {
-	return &LoginOptions{}
+// WithReturnURL sets the URL to return to after authentication is completed.
+// If a value is provided, then it takes precedence over the return_url request query parameter.
+func WithReturnURL(url string) LoginOpt {
+	return loginOptFn(func(o *LoginOptions) {
+		o.returnURL = url
+	})
+}
+
+// WithCustomState sets the custom state for the login request.
+func WithCustomState(state map[string]any) LoginOpt {
+	return loginOptFn(func(o *LoginOptions) {
+		o.customState = state
+	})
+}
+
+// NewLoginOptions returns default login options
+func NewLoginOptions(opts ...LoginOpt) *LoginOptions {
+	options := &LoginOptions{}
+	for _, opt := range opts {
+		opt.apply(options)
+	}
+	return options
 }
 
 // HandleLogin initiates the login process by creating a login state and returning the authorization url.
@@ -69,7 +95,7 @@ func (auth WristbandAuth) HandleLogin(httpCtx HTTPContext, options *LoginOptions
 		if errors.Is(err, ErrTenantNameNotFound) {
 			params := url.Values{}
 			params.Set("client_id", auth.Client.ClientID)
-			if returnURL := options.returnURL(httpCtx); returnURL != "" {
+			if returnURL := options.resolveReturnURL(httpCtx); returnURL != "" {
 				params.Set("state", strconv.Quote(returnURL))
 			}
 			if customURL, err := auth.configResolver.GetCustomApplicationLoginPageURL(); err == nil && customURL != "" {
@@ -105,8 +131,8 @@ func (auth WristbandAuth) HandleLogin(httpCtx HTTPContext, options *LoginOptions
 		WithCodeVerifier(state.CodeVerifier),
 		WithScopes(auth.configResolver.Scopes...),
 	}
-	if options != nil && options.AuthorizeRequestOpts != nil {
-		opts = append(options.AuthorizeRequestOpts, opts...)
+	if options != nil && options.authorizeRequestOpts != nil {
+		opts = append(options.authorizeRequestOpts, opts...)
 	}
 	// Create authorization request with state, nonce, and PKCE code verifier
 	authReq := auth.NewAuthorizeRequest(state.StateCookieKey,
@@ -119,10 +145,10 @@ func (auth WristbandAuth) HandleLogin(httpCtx HTTPContext, options *LoginOptions
 // ReturnURLMaxLength is the maximum length of the return URL.
 const ReturnURLMaxLength = 450
 
-func (options *LoginOptions) returnURL(req HTTPContext) string {
+func (options *LoginOptions) resolveReturnURL(req HTTPContext) string {
 	returnURL := req.Query().Get("return_url")
-	if returnURL == "" && options != nil && options.ReturnURL != "" {
-		returnURL = options.ReturnURL
+	if returnURL == "" && options != nil && options.returnURL != "" {
+		returnURL = options.returnURL
 	}
 	if len(returnURL) > ReturnURLMaxLength {
 		return ""
@@ -142,11 +168,11 @@ func (auth WristbandAuth) loginBaseURL(req HTTPContext, options *LoginOptions) (
 		return "", ErrTenantNameNotFound
 	}
 
-	if options.DefaultTenantCustomDomain != "" {
-		return options.DefaultTenantCustomDomain, nil
+	if options.defaultTenantCustomDomain != "" {
+		return options.defaultTenantCustomDomain, nil
 	}
-	if options.DefaultTenantName != "" {
-		return strings.Join([]string{options.DefaultTenantName, auth.configResolver.WristbandApplicationVanityDomain}, auth.separator()), nil
+	if options.defaultTenantName != "" {
+		return strings.Join([]string{options.defaultTenantName, auth.configResolver.WristbandApplicationVanityDomain}, auth.separator()), nil
 	}
 	return "", ErrTenantNameNotFound
 }
@@ -199,10 +225,10 @@ func CreateLoginState(queryValues QueryValueResolver, options *LoginOptions) Log
 	returnURL := queryValues.Get("return_url")
 	var customState any
 	if options != nil {
-		if options.ReturnURL != "" {
-			returnURL = options.ReturnURL
+		if options.returnURL != "" {
+			returnURL = options.returnURL
 		}
-		customState = options.CustomState
+		customState = options.customState
 	}
 	// Generate nonce and code verifier
 	return LoginState{
@@ -310,4 +336,10 @@ func (ctx CallbackContext) Session() *Session {
 		CustomTenantDomain: ctx.CustomTenantDomain,
 		TenantName:         ctx.TenantName,
 	}
+}
+
+type loginOptFn func(*LoginOptions)
+
+func (fn loginOptFn) apply(options *LoginOptions) {
+	fn(options)
 }

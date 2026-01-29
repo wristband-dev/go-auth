@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// Mock HTTPRequest for testing
+// Mock RequestURI for testing
 type mockHTTPRequest struct {
 	queryValues url.Values
 	host        string
@@ -50,9 +50,9 @@ func TestWristbandAuth_LogoutURL_WithTenantedHost(t *testing.T) {
 	req.queryValues.Set("tenant_name", "tenant1")
 
 	logoutConfig := LogoutConfig{
-		TenantName:  "tenant1",
-		RedirectURL: "https://example.com/home",
-		State:       "test-state-123",
+		tenantName:  "tenant1",
+		redirectURL: "https://example.com/home",
+		state:       "test-state-123",
 	}
 
 	logoutURL, err := auth.LogoutURL(req, logoutConfig)
@@ -113,7 +113,7 @@ func TestWristbandAuth_LogoutURL_WithCustomTenantDomain(t *testing.T) {
 	req.queryValues.Set("tenant_custom_domain", "custom.tenant.com")
 
 	logoutConfig := LogoutConfig{
-		TenantCustomDomain: "custom.tenant.com",
+		tenantCustomDomain: "custom.tenant.com",
 	}
 
 	logoutURL, err := auth.LogoutURL(req, logoutConfig)
@@ -163,7 +163,7 @@ func TestWristbandAuth_LogoutURL_NoTenantedHost_WithLogoutRedirectURI(t *testing
 	req := newMockHTTPRequest() // No tenant domain parameters
 
 	logoutConfig := LogoutConfig{
-		RedirectURL: "https://example.com/goodbye",
+		redirectURL: "https://example.com/goodbye",
 	}
 
 	logoutURL, err := auth.LogoutURL(req, logoutConfig)
@@ -232,7 +232,7 @@ func TestWristbandAuth_LogoutURL_MinimalParameters(t *testing.T) {
 	req.queryValues.Set("tenant_name", "minimal-tenant")
 
 	logoutConfig := LogoutConfig{
-		TenantName: "minimal-tenant",
+		tenantName: "minimal-tenant",
 	}
 
 	logoutURL, err := auth.LogoutURL(req, logoutConfig)
@@ -281,9 +281,9 @@ func TestWristbandAuth_LogoutURL_SpecialCharactersInParameters(t *testing.T) {
 	req.queryValues.Set("tenant_name", "tenant1")
 
 	logoutConfig := LogoutConfig{
-		TenantName:  "tenant1",
-		RedirectURL: "https://example.com/path?param=value&other=test",
-		State:       "state with spaces & symbols!",
+		tenantName:  "tenant1",
+		redirectURL: "https://example.com/path?param=value&other=test",
+		state:       "state with spaces & symbols!",
 	}
 
 	logoutURL, err := auth.LogoutURL(req, logoutConfig)
@@ -333,7 +333,7 @@ func TestWristbandAuth_LogoutURL_WithApplicationCustomDomain(t *testing.T) {
 	req.queryValues.Set("tenant_name", "tenant1")
 
 	logoutConfig := LogoutConfig{
-		TenantName: "tenant1",
+		tenantName: "tenant1",
 	}
 
 	logoutURL, err := auth.LogoutURL(req, logoutConfig)
@@ -419,8 +419,8 @@ func TestWristbandAuth_LogoutURL_BothTenantAndCustomDomain(t *testing.T) {
 	req.queryValues.Set("tenant_custom_domain", "custom.tenant.com")
 
 	logoutConfig := LogoutConfig{
-		TenantName:         "tenant1",
-		TenantCustomDomain: "custom.tenant.com",
+		tenantName:         "tenant1",
+		tenantCustomDomain: "custom.tenant.com",
 	}
 
 	logoutURL, err := auth.LogoutURL(req, logoutConfig)
@@ -463,9 +463,9 @@ func TestWristbandAuth_LogoutURL_URLEncoding(t *testing.T) {
 	req.queryValues.Set("tenant_name", "tenant1")
 
 	logoutConfig := LogoutConfig{
-		TenantName:  "tenant1",
-		RedirectURL: "https://example.com/logout?success=true&message=logged out",
-		State:       "state=test&value=123",
+		tenantName:  "tenant1",
+		redirectURL: "https://example.com/logout?success=true&message=logged out",
+		state:       "state=test&value=123",
 	}
 
 	logoutURL, err := auth.LogoutURL(req, logoutConfig)
@@ -504,7 +504,7 @@ func TestWristbandAuth_LogoutURL_EmptyTenantDomain(t *testing.T) {
 	req.queryValues.Set("tenant_name", "") // Empty tenant domain
 
 	logoutConfig := LogoutConfig{
-		TenantName: "",
+		tenantName: "",
 	}
 
 	logoutURL, err := auth.LogoutURL(req, logoutConfig)
@@ -539,10 +539,10 @@ func TestWristbandAuth_LogoutURL_NilRequest(t *testing.T) {
 	}
 
 	logoutConfig := LogoutConfig{
-		RedirectURL: "https://example.com/home",
+		redirectURL: "https://example.com/home",
 	}
 
-	// This would panic in real usage, but demonstrates the method's dependency on HTTPRequest
+	// This would panic in real usage, but demonstrates the method's dependency on RequestURI
 	defer func() {
 		if r := recover(); r == nil {
 			t.Error("Expected panic when calling LogoutURL with nil request")
@@ -579,9 +579,9 @@ func TestWristbandAuth_LogoutURL_LongParameters(t *testing.T) {
 	req.queryValues.Set("tenant_name", "tenant1")
 
 	logoutConfig := LogoutConfig{
-		TenantName:  "tenant1",
-		RedirectURL: longRedirectURI,
-		State:       longState,
+		tenantName:  "tenant1",
+		redirectURL: longRedirectURI,
+		state:       longState,
 	}
 
 	logoutURL, err := auth.LogoutURL(req, logoutConfig)
@@ -632,7 +632,7 @@ func TestWristbandAuth_LogoutURL_DefaultLogoutEndpoint(t *testing.T) {
 	req.queryValues.Set("tenant_name", "tenant1")
 
 	logoutConfig := LogoutConfig{
-		TenantName: "tenant1",
+		tenantName: "tenant1",
 	}
 
 	logoutURL, err := auth.LogoutURL(req, logoutConfig)
@@ -670,9 +670,9 @@ func BenchmarkWristbandAuth_LogoutURL_WithTenant(b *testing.B) {
 	req.queryValues.Set("tenant_name", "tenant1")
 
 	logoutConfig := LogoutConfig{
-		TenantName:  "tenant1",
-		RedirectURL: "https://example.com/home",
-		State:       "test-state-123",
+		tenantName:  "tenant1",
+		redirectURL: "https://example.com/home",
+		state:       "test-state-123",
 	}
 
 	b.ResetTimer()
@@ -702,7 +702,7 @@ func BenchmarkWristbandAuth_LogoutURL_NoTenant(b *testing.B) {
 	req := newMockHTTPRequest()
 
 	logoutConfig := LogoutConfig{
-		RedirectURL: "https://example.com/home",
+		redirectURL: "https://example.com/home",
 	}
 
 	b.ResetTimer()
@@ -733,9 +733,9 @@ func BenchmarkWristbandAuth_LogoutURL_CustomDomain(b *testing.B) {
 	req.queryValues.Set("tenant_custom_domain", "custom.tenant.com")
 
 	logoutConfig := LogoutConfig{
-		TenantCustomDomain: "custom.tenant.com",
-		RedirectURL:        "https://example.com/home",
-		State:              "test-state-123",
+		tenantCustomDomain: "custom.tenant.com",
+		redirectURL:        "https://example.com/home",
+		state:              "test-state-123",
 	}
 
 	b.ResetTimer()

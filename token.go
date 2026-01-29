@@ -231,6 +231,10 @@ func (auth WristbandAuth) RefreshAccessToken(refreshToken string, scopes ...stri
 	return req.Do(auth.httpClient)
 }
 
+const (
+	RefreshTokenType = "refresh_token"
+)
+
 // RevokeToken revokes a token (access or refresh)
 func (auth WristbandAuth) RevokeToken(token, tokenType string) error {
 	revokeEndpoint := fmt.Sprintf("https://%s", auth.RevokeEndpoint())

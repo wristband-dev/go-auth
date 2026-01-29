@@ -236,46 +236,11 @@ func TestNewApp(t *testing.T) {
 	}
 
 	sessionManager := newMockSessionManager()
-	input := AppInput{
-		SessionManager: sessionManager,
-		SessionMetadataExtractor: func(s Session) any {
-			return map[string]string{"custom": "metadata"}
-		},
-	}
 
-	app := NewApp(auth, input)
+	app := auth.NewApp(sessionManager)
 
 	if app.SessionManager != sessionManager {
 		t.Error("SessionManager not set correctly")
-	}
-	if app.sessionMetadataExtractor == nil {
-		t.Error("SessionMetadataExtractor not set correctly")
-	}
-}
-
-func TestNewAppWithOptions(t *testing.T) {
-	auth := WristbandAuth{}
-	sessionManager := newMockSessionManager()
-	input := AppInput{
-		SessionManager: sessionManager,
-	}
-
-	cookieOpts := CookieOptions{
-		Domain: "example.com",
-		Path:   "/",
-		MaxAge: 3600,
-	}
-
-	app := NewApp(auth, input, WithCookieOptions(cookieOpts))
-
-	if app.cookieOpts.Domain != cookieOpts.Domain {
-		t.Errorf("Expected cookie domain %s, got %s", cookieOpts.Domain, app.cookieOpts.Domain)
-	}
-	if app.cookieOpts.Path != cookieOpts.Path {
-		t.Errorf("Expected cookie path %s, got %s", cookieOpts.Path, app.cookieOpts.Path)
-	}
-	if app.cookieOpts.MaxAge != cookieOpts.MaxAge {
-		t.Errorf("Expected cookie MaxAge %d, got %d", cookieOpts.MaxAge, app.cookieOpts.MaxAge)
 	}
 }
 
@@ -580,18 +545,17 @@ func TestWristbandApp_SessionHandler_WithCustomMetadataExtractor(t *testing.T) {
 
 	app := WristbandApp{
 		SessionManager: sessionManager,
-		sessionMetadataExtractor: func(s Session) any {
-			return map[string]string{
-				"custom_name": s.Name,
-				"custom_id":   s.UserID,
-			}
-		},
 	}
 
 	req := httptest.NewRequest("GET", "http://example.com/session", nil)
 	res := httptest.NewRecorder()
 
-	handler := app.SessionHandler()
+	handler := app.SessionHandler(WithSessionMetadataExtractor(func(s Session) any {
+		return map[string]string{
+			"custom_name": s.Name,
+			"custom_id":   s.UserID,
+		}
+	}))
 	handler(res, req)
 
 	if res.Code != http.StatusOK {
@@ -650,16 +614,15 @@ func TestWristbandApp_SessionHandler_MarshalError(t *testing.T) {
 
 	app := WristbandApp{
 		SessionManager: sessionManager,
-		sessionMetadataExtractor: func(s Session) any {
-			// Return something that cannot be marshaled to JSON
-			return make(chan int)
-		},
 	}
 
 	req := httptest.NewRequest("GET", "http://example.com/session", nil)
 	res := httptest.NewRecorder()
 
-	handler := app.SessionHandler()
+	handler := app.SessionHandler(WithSessionMetadataExtractor(func(s Session) any {
+		// Return something that cannot be marshaled to JSON
+		return make(chan int)
+	}))
 	handler(res, req)
 
 	if res.Code != http.StatusInternalServerError {
@@ -736,21 +699,21 @@ func TestWithCookieOptions(t *testing.T) {
 	}
 
 	option := WithCookieOptions(cookieOpts)
-	app := &WristbandApp{}
-	option.apply(app)
+	auth := &WristbandAuth{}
+	option.apply(auth)
 
-	if app.cookieOpts.Domain != cookieOpts.Domain {
-		t.Errorf("Expected Domain %s, got %s", cookieOpts.Domain, app.cookieOpts.Domain)
+	if auth.cookieOptions.Domain != cookieOpts.Domain {
+		t.Errorf("Expected Domain %s, got %s", cookieOpts.Domain, auth.cookieOptions.Domain)
 	}
-	if app.cookieOpts.Path != cookieOpts.Path {
-		t.Errorf("Expected Path %s, got %s", cookieOpts.Path, app.cookieOpts.Path)
+	if auth.cookieOptions.Path != cookieOpts.Path {
+		t.Errorf("Expected Path %s, got %s", cookieOpts.Path, auth.cookieOptions.Path)
 	}
-	if app.cookieOpts.MaxAge != cookieOpts.MaxAge {
-		t.Errorf("Expected MaxAge %d, got %d", cookieOpts.MaxAge, app.cookieOpts.MaxAge)
+	if auth.cookieOptions.MaxAge != cookieOpts.MaxAge {
+		t.Errorf("Expected MaxAge %d, got %d", cookieOpts.MaxAge, auth.cookieOptions.MaxAge)
 	}
-	if app.cookieOpts.DangerouslyDisableSecureCookies != cookieOpts.DangerouslyDisableSecureCookies {
+	if auth.cookieOptions.DangerouslyDisableSecureCookies != cookieOpts.DangerouslyDisableSecureCookies {
 		t.Errorf("Expected DangerouslyDisableSecureCookies %v, got %v",
-			cookieOpts.DangerouslyDisableSecureCookies, app.cookieOpts.DangerouslyDisableSecureCookies)
+			cookieOpts.DangerouslyDisableSecureCookies, auth.cookieOptions.DangerouslyDisableSecureCookies)
 	}
 }
 
@@ -889,9 +852,7 @@ func TestLoginState_CreatedAt(t *testing.T) {
 	queryValues := url.Values{}
 	queryValues.Set("return_url", "http://example.com/return")
 
-	options := &LoginOptions{
-		CustomState: map[string]any{"key": "value"},
-	}
+	options := NewLoginOptions(WithCustomState(map[string]any{"key": "value"}))
 
 	state := CreateLoginState(queryValues, options)
 

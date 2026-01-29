@@ -181,7 +181,7 @@ func (ac *AuthConfig) Client() ConfidentialClient {
 }
 
 // RequestTenantName returns the tenant name from the request.
-func (auth WristbandAuth) RequestTenantName(req HTTPRequest) (string, error) {
+func (auth WristbandAuth) RequestTenantName(req RequestURI) (string, error) {
 	if parseTenantName := auth.configResolver.GetParseTenantFromRootDomain(); parseTenantName != "" {
 		host := req.Host()
 		if portIdx := strings.Index(host, ":"); portIdx > 0 {
@@ -196,7 +196,7 @@ func (auth WristbandAuth) RequestTenantName(req HTTPRequest) (string, error) {
 }
 
 // RequestCustomTenantName returns the custom tenant name from the request.
-func (auth WristbandAuth) RequestCustomTenantName(req HTTPRequest) (string, bool) {
+func (auth WristbandAuth) RequestCustomTenantName(req RequestURI) (string, bool) {
 	return req.Query().Get("tenant_custom_domain"), req.Query().Has("tenant_custom_domain")
 }
 
