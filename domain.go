@@ -158,6 +158,13 @@ func WithConfigScopes(scopes []string) AuthConfigOption {
 	})
 }
 
+// WithDangerouslyDisableSecureCookies disables secure cookies. Use for testing purposes only.
+func WithDangerouslyDisableSecureCookies() AuthConfigOption {
+	return authConfigOptionFunc(func(c *AuthConfig) {
+		c.DangerouslyDisableSecureCookies = true
+	})
+}
+
 // Client returns a new ConfidentialClient instance using the provided AuthConfig.
 func (ac *AuthConfig) Client() ConfidentialClient {
 	httpClient := &http.Client{

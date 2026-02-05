@@ -304,3 +304,56 @@ func (s CookieEncryptor) ReadEncrypted(r CookieRequest, name string) (string, er
 	// Return the plaintext cookie value.
 	return value, nil
 }
+
+// ReadEncryptedCookie reads an encrypted cookie value from the standard library request.
+func (s CookieEncryptor) ReadEncryptedCookie(req *http.Request, name string) (string, error) {
+	// Read the cookie as normal.
+	cookie, err := req.Cookie(name)
+	if err != nil {
+		return "", err
+	}
+
+	// Decode the base64-encoded cookie value. If the cookie didn't contain a
+	// valid base64-encoded value, this operation will fail, and we return an
+	// ErrInvalidValue error.
+	encryptedValue, err := base64.URLEncoding.DecodeString(cookie.Value)
+	if err != nil {
+		return "", ErrInvalidValue
+	}
+
+	// Get the nonce size.
+	nonceSize := s.aesGCM.NonceSize()
+
+	// To avoid a potential 'index out of range' panic in the next step, we
+	// check that the length of the encrypted value is at least the nonce
+	// size.
+	if len(encryptedValue) < nonceSize {
+		return "", ErrInvalidValue
+	}
+
+	// Split apart the nonce from the actual encrypted data.
+	nonce := encryptedValue[:nonceSize]
+	ciphertext := encryptedValue[nonceSize:]
+
+	// Use aesGCM.Open() to decrypt and authenticate the data. If this fails,
+	// return a ErrInvalidValue error.
+	plaintext, err := s.aesGCM.Open(nil, nonce, ciphertext, nil)
+	if err != nil {
+		return "", ErrInvalidValue
+	}
+
+	// The plaintext value is in the format "{cookie name}:{cookie value}". We
+	// use strings.Cut() to split it on the first ":" character.
+	expectedName, value, ok := strings.Cut(string(plaintext), ":")
+	if !ok {
+		return "", ErrInvalidValue
+	}
+
+	// Check that the cookie name is the expected one and hasn't been changed.
+	if expectedName != name {
+		return "", ErrInvalidValue
+	}
+
+	// Return the plaintext cookie value.
+	return value, nil
+}
