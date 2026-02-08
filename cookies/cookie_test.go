@@ -99,7 +99,7 @@ func TestReadCookie(t *testing.T) {
 			t.Fatalf("ReadCookie failed: %v", err)
 		}
 
-		if result != value {
+		if string(result) != value {
 			t.Errorf("Expected value '%s', got '%s'", value, result)
 		}
 	})
@@ -425,7 +425,7 @@ func TestCookieRoundTrip(t *testing.T) {
 			t.Fatalf("ReadCookie failed: %v", err)
 		}
 
-		if result != value {
+		if string(result) != value {
 			t.Errorf("Expected value '%s', got '%s'", value, result)
 		}
 	})
@@ -479,6 +479,297 @@ func TestCookieRoundTrip(t *testing.T) {
 			t.Errorf("Expected value '%s', got '%s'", value, result)
 		}
 	})
+}
+
+func TestRequestHandlerContext_ReadCookie(t *testing.T) {
+	t.Run("successful read", func(t *testing.T) {
+		value := "handler-cookie-value"
+		encodedValue := base64.URLEncoding.EncodeToString([]byte(value))
+
+		req := httptest.NewRequest("GET", "/", nil)
+		req.AddCookie(&http.Cookie{
+			Name:  "handler-test",
+			Value: encodedValue,
+		})
+		w := httptest.NewRecorder()
+
+		ctx := RequestHandlerContext{
+			request: req,
+			w:       w,
+		}
+
+		result, err := ctx.ReadCookie("handler-test")
+		if err != nil {
+			t.Fatalf("ReadCookie failed: %v", err)
+		}
+		if result != value {
+			t.Errorf("Expected value %q, got %q", value, result)
+		}
+	})
+
+	t.Run("cookie not found", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/", nil)
+		w := httptest.NewRecorder()
+
+		ctx := RequestHandlerContext{
+			request: req,
+			w:       w,
+		}
+
+		_, err := ctx.ReadCookie("nonexistent")
+		if err == nil {
+			t.Error("Expected error for nonexistent cookie")
+		}
+	})
+
+	t.Run("invalid base64 value", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/", nil)
+		req.AddCookie(&http.Cookie{
+			Name:  "bad-cookie",
+			Value: "not-valid-base64!@#$",
+		})
+		w := httptest.NewRecorder()
+
+		ctx := RequestHandlerContext{
+			request: req,
+			w:       w,
+		}
+
+		_, err := ctx.ReadCookie("bad-cookie")
+		if !errors.Is(err, ErrInvalidValue) {
+			t.Errorf("Expected ErrInvalidValue, got %v", err)
+		}
+	})
+}
+
+func TestRequestHandlerContext_WriteCookie(t *testing.T) {
+	t.Run("writes cookie with all options", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/", nil)
+		w := httptest.NewRecorder()
+
+		ctx := RequestHandlerContext{
+			request:      req,
+			w:            w,
+			CookieMaxAge: 3600,
+			CookiePath:   "/app",
+			CookieDomain: "example.com",
+		}
+
+		ctx.WriteCookie("session", "abc123")
+
+		result := w.Result()
+		cookies := result.Cookies()
+		if len(cookies) != 1 {
+			t.Fatalf("Expected 1 cookie, got %d", len(cookies))
+		}
+
+		c := cookies[0]
+		if c.Name != "session" {
+			t.Errorf("Expected name %q, got %q", "session", c.Name)
+		}
+		if c.Value != "abc123" {
+			t.Errorf("Expected value %q, got %q", "abc123", c.Value)
+		}
+		if !c.HttpOnly {
+			t.Error("Expected HttpOnly to be true")
+		}
+		if !c.Secure {
+			t.Error("Expected Secure to be true by default")
+		}
+		if c.Path != "/app" {
+			t.Errorf("Expected path %q, got %q", "/app", c.Path)
+		}
+		if c.Domain != "example.com" {
+			t.Errorf("Expected domain %q, got %q", "example.com", c.Domain)
+		}
+		if c.MaxAge != 3600 {
+			t.Errorf("Expected MaxAge %d, got %d", 3600, c.MaxAge)
+		}
+	})
+
+	t.Run("dangerously disable secure cookies", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/", nil)
+		w := httptest.NewRecorder()
+
+		ctx := RequestHandlerContext{
+			request:                        req,
+			w:                              w,
+			DangerouslyDisableSecureCookies: true,
+		}
+
+		ctx.WriteCookie("insecure", "val")
+
+		result := w.Result()
+		cookies := result.Cookies()
+		if len(cookies) != 1 {
+			t.Fatalf("Expected 1 cookie, got %d", len(cookies))
+		}
+		if cookies[0].Secure {
+			t.Error("Expected Secure to be false when DangerouslyDisableSecureCookies is true")
+		}
+	})
+}
+
+func TestReadEncryptedCookie(t *testing.T) {
+	secretKey := rand.GenerateRandomKey(32)
+	encryptor, err := NewCookieEncryptor(secretKey)
+	if err != nil {
+		t.Fatalf("NewCookieEncryptor failed: %v", err)
+	}
+
+	t.Run("successful read", func(t *testing.T) {
+		encryptedValue, err := encryptor.EncryptCookieValue("enc-cookie", "secret-data")
+		if err != nil {
+			t.Fatalf("EncryptCookieValue failed: %v", err)
+		}
+
+		req := httptest.NewRequest("GET", "/", nil)
+		req.AddCookie(&http.Cookie{
+			Name:  "enc-cookie",
+			Value: encryptedValue,
+		})
+
+		value, err := encryptor.ReadEncryptedCookie(req, "enc-cookie")
+		if err != nil {
+			t.Fatalf("ReadEncryptedCookie failed: %v", err)
+		}
+		if value != "secret-data" {
+			t.Errorf("Expected %q, got %q", "secret-data", value)
+		}
+	})
+
+	t.Run("cookie not found", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/", nil)
+
+		_, err := encryptor.ReadEncryptedCookie(req, "missing")
+		if err == nil {
+			t.Error("Expected error for missing cookie")
+		}
+	})
+
+	t.Run("invalid base64 value", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/", nil)
+		req.AddCookie(&http.Cookie{
+			Name:  "bad",
+			Value: "not-valid-base64!@#$",
+		})
+
+		_, err := encryptor.ReadEncryptedCookie(req, "bad")
+		if !errors.Is(err, ErrInvalidValue) {
+			t.Errorf("Expected ErrInvalidValue, got %v", err)
+		}
+	})
+
+	t.Run("tampered encrypted value", func(t *testing.T) {
+		tamperedValue := base64.URLEncoding.EncodeToString([]byte("tampered-data-that-is-long-enough-for-nonce"))
+		req := httptest.NewRequest("GET", "/", nil)
+		req.AddCookie(&http.Cookie{
+			Name:  "tampered",
+			Value: tamperedValue,
+		})
+
+		_, err := encryptor.ReadEncryptedCookie(req, "tampered")
+		if !errors.Is(err, ErrInvalidValue) {
+			t.Errorf("Expected ErrInvalidValue, got %v", err)
+		}
+	})
+
+	t.Run("value too short for nonce", func(t *testing.T) {
+		shortValue := base64.URLEncoding.EncodeToString([]byte("short"))
+		req := httptest.NewRequest("GET", "/", nil)
+		req.AddCookie(&http.Cookie{
+			Name:  "short",
+			Value: shortValue,
+		})
+
+		_, err := encryptor.ReadEncryptedCookie(req, "short")
+		if !errors.Is(err, ErrInvalidValue) {
+			t.Errorf("Expected ErrInvalidValue, got %v", err)
+		}
+	})
+}
+
+func TestStdRequest_Cookies(t *testing.T) {
+	t.Run("returns all cookie names", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/", nil)
+		req.AddCookie(&http.Cookie{Name: "alpha", Value: "1"})
+		req.AddCookie(&http.Cookie{Name: "beta", Value: "2"})
+		req.AddCookie(&http.Cookie{Name: "gamma", Value: "3"})
+
+		stdReq := StandardRequest(req)
+		names := stdReq.Cookies()
+
+		if len(names) != 3 {
+			t.Fatalf("Expected 3 cookie names, got %d", len(names))
+		}
+
+		nameSet := make(map[string]bool)
+		for _, n := range names {
+			nameSet[n] = true
+		}
+		for _, expected := range []string{"alpha", "beta", "gamma"} {
+			if !nameSet[expected] {
+				t.Errorf("Expected cookie name %q in result", expected)
+			}
+		}
+	})
+
+	t.Run("returns empty for no cookies", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/", nil)
+		stdReq := StandardRequest(req)
+		names := stdReq.Cookies()
+
+		if len(names) != 0 {
+			t.Errorf("Expected 0 cookie names, got %d", len(names))
+		}
+	})
+}
+
+func TestEncryptCookieValue_TooLong(t *testing.T) {
+	secretKey := rand.GenerateRandomKey(32)
+	encryptor, err := NewCookieEncryptor(secretKey)
+	if err != nil {
+		t.Fatalf("NewCookieEncryptor failed: %v", err)
+	}
+
+	longValue := strings.Repeat("x", 5000)
+	_, err = encryptor.EncryptCookieValue("test", longValue)
+	if !errors.Is(err, ErrValueTooLong) {
+		t.Errorf("Expected ErrValueTooLong, got %v", err)
+	}
+}
+
+func TestWriteEncrypted_TooLong(t *testing.T) {
+	secretKey := rand.GenerateRandomKey(32)
+	encryptor, err := NewCookieEncryptor(secretKey)
+	if err != nil {
+		t.Fatalf("NewCookieEncryptor failed: %v", err)
+	}
+
+	w := httptest.NewRecorder()
+	cookie := http.Cookie{
+		Name:  "big",
+		Value: strings.Repeat("x", 5000),
+	}
+
+	err = encryptor.WriteEncrypted(w, cookie)
+	if !errors.Is(err, ErrValueTooLong) {
+		t.Errorf("Expected ErrValueTooLong, got %v", err)
+	}
+}
+
+func TestReadEncrypted_CookieNotFound(t *testing.T) {
+	secretKey := rand.GenerateRandomKey(32)
+	encryptor, err := NewCookieEncryptor(secretKey)
+	if err != nil {
+		t.Fatalf("NewCookieEncryptor failed: %v", err)
+	}
+
+	req := httptest.NewRequest("GET", "/", nil)
+	_, err = encryptor.ReadEncrypted(StandardRequest(req), "nonexistent")
+	if err == nil {
+		t.Error("Expected error for nonexistent cookie")
+	}
 }
 
 func TestErrorVariables(t *testing.T) {

@@ -321,7 +321,7 @@ func (auth WristbandAuth) HandleCallback(httpCtx HTTPContext) (*CallbackContext,
 // Session returns a *Session object from the callback context.
 func (ctx CallbackContext) Session() *Session {
 	expiresIn := time.Second * time.Duration(ctx.TokenResponse.ExpiresIn)
-	expiresAt := time.Now().Add(expiresIn)
+	expiresAt := time.Now().UTC().Add(expiresIn)
 	return &Session{
 		AccessToken:        ctx.TokenResponse.AccessToken,
 		RefreshToken:       ctx.TokenResponse.RefreshToken,
@@ -329,10 +329,6 @@ func (ctx CallbackContext) Session() *Session {
 		ExpiresAt:          expiresAt,
 		ExpiresIn:          expiresIn,
 		UserInfo:           ctx.UserInfo,
-		ReturnURL:          ctx.LoginState.ReturnURL,
-		UserID:             ctx.UserInfo.Sub,
-		Name:               ctx.UserInfo.Name,
-		TenantID:           ctx.UserInfo.TenantID,
 		CustomTenantDomain: ctx.CustomTenantDomain,
 		TenantName:         ctx.TenantName,
 	}

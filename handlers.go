@@ -11,20 +11,17 @@ import (
 type (
 	// Session represents the user session after successful authentication
 	Session struct {
-		AccessToken  string `json:"access_token"`
-		RefreshToken string `json:"refresh_token"`
+		AccessToken  string `json:"accessToken"`
+		RefreshToken string `json:"refreshToken"`
 		IDToken      string `json:"-"`
 		// ExpiresAt is the expiration time of the access token.
-		ExpiresAt          time.Time        `json:"expires_at"`
+		ExpiresAt          time.Time        `json:"expiresAt"`
 		ExpiresIn          time.Duration    `json:"expiresIn"`
-		UserInfo           UserInfoResponse `json:"user_info"`
-		ReturnURL          string           `json:"-"`
-		UserID             string           `json:"userID"`
-		Name               string           `json:"name"`
-		TenantID           string           `json:"tenantId"`
-		IDPName            string           `json:"idpName"`
+		UserInfo           UserInfoResponse `json:"userInfo"`
 		TenantName         string           `json:"tenantName"`
 		CustomTenantDomain string           `json:"customTenantDomain"`
+		// CustomData can be used for any additional session data.
+		CustomData map[string]any `json:"customData"`
 	}
 
 	// SessionManager defines the interface for session management
@@ -68,6 +65,7 @@ func (f appOptionFunc) apply(c *WristbandApp) {
 // It requires a SessionManager.
 type WristbandApp struct {
 	WristbandAuth
+	// SessionManager is used for reading and writing sessions.
 	SessionManager SessionManager
 }
 
@@ -86,6 +84,9 @@ func (app WristbandApp) LoginHandler(opts ...LoginOpt) http.HandlerFunc {
 	options := NewLoginOptions(opts...)
 
 	return func(res http.ResponseWriter, req *http.Request) {
+		// Avoid caching.
+		res.Header().Set("Cache-Control", "no-cache, no-store")
+		res.Header().Set("Pragma", "no-cache")
 		httpCtx := app.HTTPContext(res, req)
 		res.Header().Set("Cache-Control", "no-cache, no-store")
 		res.Header().Set("Pragma", "no-cache")
@@ -104,6 +105,9 @@ func (app WristbandApp) LoginHandler(opts ...LoginOpt) http.HandlerFunc {
 // CallbackHandler creates a middleware for handling the OAuth callback
 func (app WristbandApp) CallbackHandler() http.HandlerFunc {
 	return func(res http.ResponseWriter, req *http.Request) {
+		// Avoid caching.
+		res.Header().Set("Cache-Control", "no-cache, no-store")
+		res.Header().Set("Pragma", "no-cache")
 		ctx := app.HTTPContext(res, req)
 		// Create session
 		callbackContext, err := app.HandleCallback(ctx)
@@ -150,6 +154,9 @@ func (app WristbandApp) clearAllLoginCookies(ctx HTTPContext) {
 // LogoutHandler creates a middleware for logging out users
 func (app WristbandApp) LogoutHandler(opts ...LogoutOption) http.HandlerFunc {
 	return func(res http.ResponseWriter, req *http.Request) {
+		// Avoid caching.
+		res.Header().Set("Cache-Control", "no-cache, no-store")
+		res.Header().Set("Pragma", "no-cache")
 		ctx := req.Context()
 		httpContext := app.HTTPContext(res, req)
 
@@ -234,8 +241,8 @@ func (app WristbandApp) SessionHandler(opts ...SessionHandlerOption) http.Handle
 		}
 
 		resp := SessionResponse{
-			UserID:   session.UserID,
-			TenantID: session.TenantID,
+			UserID:   session.UserInfo.Sub,
+			TenantID: session.UserInfo.TenantID,
 		}
 		if cfg.sessionMetadataExtractor != nil {
 			resp.Metadata = cfg.sessionMetadataExtractor(*session)

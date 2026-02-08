@@ -221,7 +221,7 @@ func (cr *ConfigResolver) validateTenantDomainTokens() error {
 		if _, ok := containsTenantPlaceholder(cr.RedirectURI); !ok {
 			return fmt.Errorf("the [redirect_uri] must contain the %s when using the [parse_tenant_from_root_domain] config", TenantPlaceholderMessage)
 		}
-	} else {
+	} else if cr.SdkConfiguration != nil {
 		if _, ok := containsTenantPlaceholder(cr.LoginURL); ok {
 			return fmt.Errorf("the [login_url] cannot contain the %s when the [parse_tenant_from_root_domain] is absent", TenantPlaceholderMessage)
 		}

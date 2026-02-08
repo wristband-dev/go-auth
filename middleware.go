@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 	"net/url"
-	"strings"
 	"time"
 )
 
@@ -72,23 +71,13 @@ func (app WristbandApp) RefreshTokenIfExpired(next http.Handler) http.Handler {
 	})
 }
 
-// RequireAuthentication is a middleware that checks if the user is authenticated.
+// RequireAuthentication is a middleware that checks if the user is authenticated and sets the session in the context.
 func (app WristbandApp) RequireAuthentication(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(res http.ResponseWriter, req *http.Request) {
 		// Get session from session manager
 		session, err := app.SessionManager.GetSession(req.Context(), req)
 		if err != nil {
-			// No session, redirect to login with return URL
-			returnURL := url.QueryEscape(req.URL.String())
-			redirectURL := app.configResolver.MustLoginURL()
-			if !strings.Contains(redirectURL, "?") {
-				redirectURL += "?"
-			} else {
-				redirectURL += "&"
-			}
-			redirectURL += "return_url=" + returnURL
-
-			http.Redirect(res, req, redirectURL, http.StatusFound)
+			res.WriteHeader(http.StatusUnauthorized)
 			return
 		}
 		req = req.WithContext(WithSessionContext(req.Context(), session))
