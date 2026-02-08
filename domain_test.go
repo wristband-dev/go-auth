@@ -85,8 +85,8 @@ func TestWithAutoConfigurableConfigs(t *testing.T) {
 	if cfg.SdkConfiguration == nil {
 		t.Fatal("SdkConfiguration should be set")
 	}
-	if cfg.SdkConfiguration.LoginURL != sdkCfg.LoginURL {
-		t.Errorf("Expected LoginURL %q, got %q", sdkCfg.LoginURL, cfg.SdkConfiguration.LoginURL)
+	if cfg.LoginURL != sdkCfg.LoginURL {
+		t.Errorf("Expected LoginURL %q, got %q", sdkCfg.LoginURL, cfg.LoginURL)
 	}
 }
 
@@ -102,6 +102,7 @@ func TestRoundTripperFunc(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RoundTrip returned error: %v", err)
 	}
+	defer resp.Body.Close()
 	if !called {
 		t.Error("RoundTripper function was not called")
 	}

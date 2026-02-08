@@ -592,8 +592,8 @@ func TestRequestHandlerContext_WriteCookie(t *testing.T) {
 		w := httptest.NewRecorder()
 
 		ctx := RequestHandlerContext{
-			request:                        req,
-			w:                              w,
+			request:                         req,
+			w:                               w,
 			DangerouslyDisableSecureCookies: true,
 		}
 

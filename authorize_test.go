@@ -111,7 +111,6 @@ func hasAll[T comparable](slice []T, items ...T) bool {
 		}
 	}
 	return found == len(items)
-
 }
 
 func TestWithAdditionalScopes_NoDuplicates(t *testing.T) {
