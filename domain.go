@@ -72,6 +72,8 @@ type AuthConfig struct {
 	// SdkConfiguration is the configuration that can be automatically configured using the Wristband configuration endpoint.
 	// Required when AutoConfigureEnabled is false. If auto-configure is enabled, then the static values will take precedence.
 	*SdkConfiguration
+
+	httpClient *http.Client
 }
 
 // NewAuthConfig creates a new AuthConfig.
@@ -83,6 +85,7 @@ func NewAuthConfig(clientID, clientSecret, wristbandDomain string, opts ...AuthC
 		WristbandApplicationVanityDomain: wristbandDomain,
 		Scopes:                           DefaultScopes,
 		TokenExpirationBuffer:            DefaultTokenExpirationBuffer,
+		httpClient:                       http.DefaultClient,
 	}
 	for _, opt := range opts {
 		opt.apply(ac)
@@ -110,6 +113,13 @@ func (fn RoundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) 
 type authConfigOptionFunc func(*AuthConfig)
 
 func (f authConfigOptionFunc) apply(c *AuthConfig) { f(c) }
+
+// WithHTTPClient allows setting a custom HTTP client for the remote requests.
+func WithHTTPClient(client *http.Client) AuthConfigOption {
+	return authConfigOptionFunc(func(c *AuthConfig) {
+		c.httpClient = client
+	})
+}
 
 // WithAutoConfigureDisabled disables the auto-configure.
 func WithAutoConfigureDisabled(loginURL, redirectURI string) AuthConfigOption {
@@ -169,7 +179,6 @@ func WithDangerouslyDisableSecureCookies() AuthConfigOption {
 func (ac *AuthConfig) Client() ConfidentialClient {
 	httpClient := &http.Client{
 		Transport: RoundTripperFunc(func(req *http.Request) (*http.Response, error) {
-			log.Printf("URL: %s\n", req.URL.String())
 			resp, err := http.DefaultTransport.RoundTrip(req)
 			if err != nil {
 				log.Printf("Error: %v\n", err)

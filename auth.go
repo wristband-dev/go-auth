@@ -22,7 +22,7 @@ func (ac *AuthConfig) WristbandAuth(opts ...AuthOption) (WristbandAuth, error) {
 		userInfoEndpoint: DefaultUserInfoEndpoint,
 		revokeEndpoint:   DefaultRevokeEndpoint,
 		endpointRoot:     ac.WristbandApplicationVanityDomain + DefaultAPIPath,
-		httpClient:       http.DefaultClient,
+		httpClient:       ac.httpClient,
 		configResolver:   resolver,
 	}
 
@@ -116,13 +116,6 @@ func (auth WristbandAuth) defaultCookieOptions() CookieOptions {
 // AuthOption is an interface for options that can be applied to modify the WristbandAuth configuration.
 type AuthOption interface {
 	apply(*WristbandAuth)
-}
-
-// WithHTTPClient allows setting a custom HTTP client for the remote requests.
-func WithHTTPClient(client *http.Client) AuthOption {
-	return authOptionFunc(func(c *WristbandAuth) {
-		c.httpClient = client
-	})
 }
 
 // WithCookieOptions sets the cookie configuration for the app.

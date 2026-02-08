@@ -360,52 +360,71 @@ func TestWristbandApp_LoginHandler_WithCustomLoginPage(t *testing.T) {
 	}
 }
 
-func TestWristbandApp_CallbackHandler_Success(t *testing.T) {
-	sessionManager := newMockSessionManager()
-
-	app := WristbandApp{
-		SessionManager: sessionManager,
+func TestWristbandApp_CallbackHandler_RequestError(t *testing.T) {
+	authConfig := &AuthConfig{
+		ClientID:                         "test-client",
+		ClientSecret:                     "test-secret",
+		WristbandApplicationVanityDomain: "test.wristband.com",
+		AutoConfigureEnabled:             false,
+		Scopes:                           []string{"openid"},
+		SdkConfiguration: &SdkConfiguration{
+			LoginURL:    "https://test.wristband.com/login",
+			RedirectURI: "http://example.com/callback",
+		},
 	}
+	auth, _ := authConfig.WristbandAuth()
+	app := auth.NewApp(newMockSessionManager())
 
-	// This test would need more mocking for the full callback flow
-	// For now, test the basic structure
+	// Request with error query params from Wristband
+	req := httptest.NewRequest("GET", "http://example.com/callback?error=access_denied&error_description=user+denied", nil)
+	res := httptest.NewRecorder()
+
 	handler := app.CallbackHandler()
-	if handler == nil {
-		t.Fatal("CallbackHandler should not return nil")
+	handler(res, req)
+
+	if res.Code != http.StatusInternalServerError {
+		t.Errorf("Expected status %d, got %d", http.StatusInternalServerError, res.Code)
 	}
 }
 
 func TestWristbandApp_CallbackHandler_MissingCode(t *testing.T) {
-	sessionManager := newMockSessionManager()
-	app := WristbandApp{
-		SessionManager: sessionManager,
+	authConfig := &AuthConfig{
+		ClientID:                         "test-client",
+		ClientSecret:                     "test-secret",
+		WristbandApplicationVanityDomain: "test.wristband.com",
+		AutoConfigureEnabled:             false,
+		Scopes:                           []string{"openid"},
+		SdkConfiguration: &SdkConfiguration{
+			LoginURL:    "https://test.wristband.com/login",
+			RedirectURI: "http://example.com/callback",
+		},
 	}
+	auth, _ := authConfig.WristbandAuth()
+	app := auth.NewApp(newMockSessionManager())
 
-	// Test that the handler can be created
-	handler := app.CallbackHandler()
-	if handler == nil {
-		t.Fatal("CallbackHandler should not return nil")
-	}
-}
-
-func TestWristbandApp_CallbackHandler_SessionStoreError(t *testing.T) {
-	sessionManager := newMockSessionManager()
-	sessionManager.storeErr = fmt.Errorf("store error")
-
-	app := WristbandApp{
-		SessionManager: sessionManager,
-	}
+	// Request without code param
+	req := httptest.NewRequest("GET", "http://example.com/callback?tenant_name=acme", nil)
+	res := httptest.NewRecorder()
 
 	handler := app.CallbackHandler()
-	if handler == nil {
-		t.Fatal("CallbackHandler should not return nil")
+	handler(res, req)
+
+	if res.Code != http.StatusInternalServerError {
+		t.Errorf("Expected status %d, got %d", http.StatusInternalServerError, res.Code)
 	}
 }
 
 func TestWristbandApp_LogoutHandler_Success(t *testing.T) {
+	// Mock revoke endpoint
+	revokeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer revokeServer.Close()
+
 	sessionManager := newMockSessionManager()
 	session := &Session{
 		RefreshToken: "test-refresh-token",
+		TenantName:   "tenant1",
 		UserInfo:     UserInfoResponse{Sub: "test-user"},
 	}
 	sessionManager.sessions["test-session"] = session
@@ -420,19 +439,29 @@ func TestWristbandApp_LogoutHandler_Success(t *testing.T) {
 			LoginURL:    "https://test.wristband.com/login",
 			RedirectURI: "http://example.com/callback",
 		},
+		httpClient: revokeServer.Client(),
 	}
-	resolver, _ := NewConfigResolver(authConfig)
-	app := WristbandApp{
-		WristbandAuth: WristbandAuth{
-			Client:         ConfidentialClient{ClientID: "test-client"},
-			configResolver: resolver,
-		},
-		SessionManager: sessionManager,
-	}
+	auth, _ := authConfig.WristbandAuth()
+	app := auth.NewApp(sessionManager)
+
+	req := httptest.NewRequest("GET", "http://example.com/logout?tenant_name=tenant1", nil)
+	res := httptest.NewRecorder()
 
 	handler := app.LogoutHandler()
-	if handler == nil {
-		t.Fatal("LogoutHandler should not return nil")
+	handler(res, req)
+
+	if res.Code != http.StatusFound {
+		t.Errorf("Expected status %d, got %d", http.StatusFound, res.Code)
+	}
+
+	location := res.Header().Get("Location")
+	if !strings.Contains(location, "logout") {
+		t.Errorf("Expected redirect to logout URL, got %s", location)
+	}
+
+	// Verify session was cleared
+	if _, exists := sessionManager.sessions["test-session"]; exists {
+		t.Error("Session should have been cleared")
 	}
 }
 
@@ -451,34 +480,53 @@ func TestWristbandApp_LogoutHandler_NoSession(t *testing.T) {
 			RedirectURI: "http://example.com/callback",
 		},
 	}
-	resolver, _ := NewConfigResolver(authConfig)
-	app := WristbandApp{
-		WristbandAuth: WristbandAuth{
-			Client:         ConfidentialClient{ClientID: "test-client"},
-			configResolver: resolver,
-		},
-		SessionManager: sessionManager,
-	}
+	auth, _ := authConfig.WristbandAuth()
+	app := auth.NewApp(sessionManager)
+
+	// With tenant_name in query, LogoutURL can build a URL even without a session
+	req := httptest.NewRequest("GET", "http://example.com/logout?tenant_name=tenant1", nil)
+	res := httptest.NewRecorder()
 
 	handler := app.LogoutHandler()
-	if handler == nil {
-		t.Fatal("LogoutHandler should not return nil")
+	handler(res, req)
+
+	// Should redirect to logout URL (no session to clear)
+	if res.Code != http.StatusFound {
+		t.Errorf("Expected status %d, got %d", http.StatusFound, res.Code)
 	}
 }
 
 func TestWristbandApp_LogoutHandler_ClearSessionError(t *testing.T) {
 	sessionManager := newMockSessionManager()
 	sessionManager.clearErr = fmt.Errorf("clear error")
-	session := &Session{UserInfo: UserInfoResponse{Sub: "test-user"}}
+	session := &Session{
+		TenantName: "tenant1",
+		UserInfo:   UserInfoResponse{Sub: "test-user"},
+	}
 	sessionManager.sessions["test-session"] = session
 
-	app := WristbandApp{
-		SessionManager: sessionManager,
+	authConfig := &AuthConfig{
+		ClientID:                         "test-client",
+		ClientSecret:                     "test-secret",
+		WristbandApplicationVanityDomain: "test.wristband.com",
+		AutoConfigureEnabled:             false,
+		Scopes:                           []string{"openid"},
+		SdkConfiguration: &SdkConfiguration{
+			LoginURL:    "https://test.wristband.com/login",
+			RedirectURI: "http://example.com/callback",
+		},
 	}
+	auth, _ := authConfig.WristbandAuth()
+	app := auth.NewApp(sessionManager)
+
+	req := httptest.NewRequest("GET", "http://example.com/logout?tenant_name=tenant1", nil)
+	res := httptest.NewRecorder()
 
 	handler := app.LogoutHandler()
-	if handler == nil {
-		t.Fatal("LogoutHandler should not return nil")
+	handler(res, req)
+
+	if res.Code != http.StatusInternalServerError {
+		t.Errorf("Expected status %d, got %d", http.StatusInternalServerError, res.Code)
 	}
 }
 
@@ -759,6 +807,117 @@ func BenchmarkSessionJSONMarshaling(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
+	}
+}
+
+// Test login options
+
+func TestWithDefaultTenantCustomDomain(t *testing.T) {
+	opts := NewLoginOptions(WithDefaultTenantCustomDomain("custom.acme.com"))
+	if opts.defaultTenantCustomDomain != "custom.acme.com" {
+		t.Errorf("Expected %q, got %q", "custom.acme.com", opts.defaultTenantCustomDomain)
+	}
+}
+
+func TestWithDefaultTenantName(t *testing.T) {
+	opts := NewLoginOptions(WithDefaultTenantName("acme"))
+	if opts.defaultTenantName != "acme" {
+		t.Errorf("Expected %q, got %q", "acme", opts.defaultTenantName)
+	}
+}
+
+func TestWithReturnURL(t *testing.T) {
+	opts := NewLoginOptions(WithReturnURL("https://example.com/dashboard"))
+	if opts.returnURL != "https://example.com/dashboard" {
+		t.Errorf("Expected %q, got %q", "https://example.com/dashboard", opts.returnURL)
+	}
+}
+
+func TestCallbackContext_Session(t *testing.T) {
+	ctx := CallbackContext{
+		TokenResponse: TokenResponse{
+			AccessToken:  "access-tok",
+			RefreshToken: "refresh-tok",
+			IDToken:      "id-tok",
+			ExpiresIn:    3600,
+		},
+		UserInfo: UserInfoResponse{
+			Sub:      "user-123",
+			Name:     "Alice",
+			Email:    "alice@example.com",
+			TenantID: "tenant-abc",
+		},
+		TenantName:         "acme",
+		CustomTenantDomain: "custom.acme.com",
+	}
+
+	session := ctx.Session()
+
+	if session.AccessToken != "access-tok" {
+		t.Errorf("Expected AccessToken %q, got %q", "access-tok", session.AccessToken)
+	}
+	if session.RefreshToken != "refresh-tok" {
+		t.Errorf("Expected RefreshToken %q, got %q", "refresh-tok", session.RefreshToken)
+	}
+	if session.IDToken != "id-tok" {
+		t.Errorf("Expected IDToken %q, got %q", "id-tok", session.IDToken)
+	}
+	if session.ExpiresIn != time.Hour {
+		t.Errorf("Expected ExpiresIn %v, got %v", time.Hour, session.ExpiresIn)
+	}
+	if session.ExpiresAt.IsZero() {
+		t.Error("ExpiresAt should be set")
+	}
+	if session.UserInfo.Sub != "user-123" {
+		t.Errorf("Expected UserInfo.Sub %q, got %q", "user-123", session.UserInfo.Sub)
+	}
+	if session.TenantName != "acme" {
+		t.Errorf("Expected TenantName %q, got %q", "acme", session.TenantName)
+	}
+	if session.CustomTenantDomain != "custom.acme.com" {
+		t.Errorf("Expected CustomTenantDomain %q, got %q", "custom.acme.com", session.CustomTenantDomain)
+	}
+}
+
+// Test clearAllLoginCookies
+
+func TestWristbandApp_ClearAllLoginCookies(t *testing.T) {
+	app := WristbandApp{}
+	mockCtx := newMockHTTPContext()
+	mockCookieReq := mockCtx.cookieRequest.(*mockCookieRequest)
+
+	// Add login cookies and a regular cookie
+	mockCookieReq.cookies["login#state1#1000"] = "val1"
+	mockCookieReq.cookies["login#state2#2000"] = "val2"
+	mockCookieReq.cookies["session-id"] = "sess-val"
+
+	app.clearAllLoginCookies(mockCtx)
+
+	if len(mockCtx.clearedCookies) != 2 {
+		t.Errorf("Expected 2 cookies cleared, got %d", len(mockCtx.clearedCookies))
+	}
+
+	clearedSet := make(map[string]bool)
+	for _, name := range mockCtx.clearedCookies {
+		clearedSet[name] = true
+	}
+	if !clearedSet["login#state1#1000"] || !clearedSet["login#state2#2000"] {
+		t.Error("Both login cookies should be cleared")
+	}
+	if clearedSet["session-id"] {
+		t.Error("Non-login cookie should not be cleared")
+	}
+}
+
+func TestWristbandApp_ClearAllLoginCookies_NoCookies(t *testing.T) {
+	app := WristbandApp{}
+	mockCtx := newMockHTTPContext()
+
+	// No cookies at all
+	app.clearAllLoginCookies(mockCtx)
+
+	if len(mockCtx.clearedCookies) != 0 {
+		t.Errorf("Expected 0 cookies cleared, got %d", len(mockCtx.clearedCookies))
 	}
 }
 

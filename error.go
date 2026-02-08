@@ -75,7 +75,7 @@ func (e RedirectError) Error() string {
 
 // NewRedirectError creates a new RedirectError.
 func NewRedirectError(err, url string) error {
-	return RedirectError{
+	return &RedirectError{
 		Message: err,
 		URL:     url,
 	}

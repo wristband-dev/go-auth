@@ -185,7 +185,7 @@ func (req TokenRequest) Do(httpClient *http.Client) (TokenResponse, error) {
 
 	// Use default HTTP client if none provided
 	if httpClient == nil {
-		httpClient = http.DefaultClient
+		httpClient = req.Client.httpClient
 	}
 
 	// Create the HTTP request
@@ -232,6 +232,7 @@ func (auth WristbandAuth) RefreshAccessToken(refreshToken string, scopes ...stri
 }
 
 const (
+	// RefreshTokenType is the type of token for refresh tokens.
 	RefreshTokenType = "refresh_token"
 )
 

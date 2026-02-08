@@ -646,6 +646,132 @@ func TestWristbandAuth_LogoutURL_DefaultLogoutEndpoint(t *testing.T) {
 	}
 }
 
+// Test LogoutConfig construction and options
+
+func TestNewLogoutConfig_Empty(t *testing.T) {
+	cfg := NewLogoutConfig()
+	if cfg.redirectURL != "" || cfg.state != "" || cfg.tenantName != "" || cfg.tenantCustomDomain != "" {
+		t.Error("Empty LogoutConfig should have zero-value fields")
+	}
+}
+
+func TestNewLogoutConfig_WithAllOptions(t *testing.T) {
+	cfg := NewLogoutConfig(
+		WithRedirectURL("https://example.com/bye"),
+		WithState("logout-state-xyz"),
+		WithTenantCustomDomain("custom.tenant.com"),
+		WithTenantName("acme"),
+	)
+
+	if cfg.redirectURL != "https://example.com/bye" {
+		t.Errorf("Expected redirectURL %q, got %q", "https://example.com/bye", cfg.redirectURL)
+	}
+	if cfg.state != "logout-state-xyz" {
+		t.Errorf("Expected state %q, got %q", "logout-state-xyz", cfg.state)
+	}
+	if cfg.tenantCustomDomain != "custom.tenant.com" {
+		t.Errorf("Expected tenantCustomDomain %q, got %q", "custom.tenant.com", cfg.tenantCustomDomain)
+	}
+	if cfg.tenantName != "acme" {
+		t.Errorf("Expected tenantName %q, got %q", "acme", cfg.tenantName)
+	}
+}
+
+func TestWithSession_SetsFromSession(t *testing.T) {
+	session := Session{
+		TenantName:         "session-tenant",
+		CustomTenantDomain: "session-custom.com",
+	}
+	cfg := NewLogoutConfig(WithSession(session))
+
+	if cfg.tenantName != "session-tenant" {
+		t.Errorf("Expected tenantName %q from session, got %q", "session-tenant", cfg.tenantName)
+	}
+	if cfg.tenantCustomDomain != "session-custom.com" {
+		t.Errorf("Expected tenantCustomDomain %q from session, got %q", "session-custom.com", cfg.tenantCustomDomain)
+	}
+}
+
+func TestWithSession_DoesNotOverrideExplicitValues(t *testing.T) {
+	session := Session{
+		TenantName:         "session-tenant",
+		CustomTenantDomain: "session-custom.com",
+	}
+	cfg := NewLogoutConfig(
+		WithTenantName("explicit-tenant"),
+		WithTenantCustomDomain("explicit-custom.com"),
+		WithSession(session),
+	)
+
+	if cfg.tenantName != "explicit-tenant" {
+		t.Errorf("Expected tenantName %q (explicit), got %q", "explicit-tenant", cfg.tenantName)
+	}
+	if cfg.tenantCustomDomain != "explicit-custom.com" {
+		t.Errorf("Expected tenantCustomDomain %q (explicit), got %q", "explicit-custom.com", cfg.tenantCustomDomain)
+	}
+}
+
+func TestLogoutURL_StateTooLong(t *testing.T) {
+	authConfig := &AuthConfig{
+		ClientID:                         "test-client",
+		ClientSecret:                     "test-secret",
+		WristbandApplicationVanityDomain: "test.wristband.com",
+		AutoConfigureEnabled:             false,
+		Scopes:                           []string{"openid"},
+		SdkConfiguration: &SdkConfiguration{
+			LoginURL:    "https://test.wristband.com/login",
+			RedirectURI: "http://example.com/callback",
+		},
+	}
+	resolver, _ := NewConfigResolver(authConfig)
+	auth := WristbandAuth{
+		Client:         ConfidentialClient{ClientID: "test-client"},
+		configResolver: resolver,
+	}
+
+	req := newMockHTTPRequest()
+	req.queryValues.Set("tenant_name", "tenant1")
+
+	longState := strings.Repeat("x", 513)
+	cfg := LogoutConfig{tenantName: "tenant1", state: longState}
+
+	_, err := auth.LogoutURL(req, cfg)
+	if err == nil {
+		t.Error("Expected error for state exceeding 512 characters")
+	}
+	if !strings.Contains(err.Error(), "512") {
+		t.Errorf("Expected error message about 512 char limit, got %q", err.Error())
+	}
+}
+
+func TestLogoutURL_NoTenant_WithCustomLoginPage(t *testing.T) {
+	authConfig := &AuthConfig{
+		ClientID:                         "test-client",
+		ClientSecret:                     "test-secret",
+		WristbandApplicationVanityDomain: "test.wristband.com",
+		AutoConfigureEnabled:             false,
+		Scopes:                           []string{"openid"},
+		SdkConfiguration: &SdkConfiguration{
+			LoginURL:                      "https://test.wristband.com/login",
+			RedirectURI:                   "http://example.com/callback",
+			CustomApplicationLoginPageURL: "https://custom-login.example.com",
+		},
+	}
+	auth, err := authConfig.WristbandAuth()
+	if err != nil {
+		t.Fatalf("Failed to create auth: %v", err)
+	}
+
+	req := newMockHTTPRequest()
+	logoutURL, err := auth.LogoutURL(req, LogoutConfig{})
+	if err != nil {
+		t.Fatalf("LogoutURL returned error: %v", err)
+	}
+	if !strings.Contains(logoutURL, "custom-login.example.com") {
+		t.Errorf("Expected custom login page URL, got %s", logoutURL)
+	}
+}
+
 // Benchmark tests
 
 func BenchmarkWristbandAuth_LogoutURL_WithTenant(b *testing.B) {
