@@ -68,7 +68,7 @@ func WithTenantName(tenantName string) LogoutOption {
 func WithSession(session Session) LogoutOption {
 	return LogoutOptionFunc(func(config *LogoutConfig) {
 		if config.tenantCustomDomain == "" {
-			config.tenantCustomDomain = session.CustomTenantDomain
+			config.tenantCustomDomain = session.TenantCustomDomain
 		}
 		if config.tenantName == "" {
 			config.tenantName = session.TenantName

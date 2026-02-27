@@ -157,8 +157,8 @@ func (options *LoginOptions) resolveReturnURL(req HTTPContext) string {
 }
 
 func (auth WristbandAuth) loginBaseURL(req HTTPContext, options *LoginOptions) (string, error) {
-	if customTenantDomain, ok := auth.RequestCustomTenantName(req); ok {
-		return customTenantDomain, nil
+	if TenantCustomDomain, ok := auth.RequestCustomTenantName(req); ok {
+		return TenantCustomDomain, nil
 	}
 	if tenantName, err := auth.RequestTenantName(req); err == nil && tenantName != "" {
 		return strings.Join([]string{tenantName, auth.configResolver.WristbandApplicationVanityDomain}, auth.separator()), nil
@@ -253,7 +253,7 @@ type CallbackContext struct {
 	LoginState         LoginState
 	UserInfo           UserInfoResponse
 	TenantName         string
-	CustomTenantDomain string
+	TenantCustomDomain string
 }
 
 // ErrorNoLoginState is returned when no login state is found.
@@ -314,7 +314,7 @@ func (auth WristbandAuth) HandleCallback(httpCtx HTTPContext) (*CallbackContext,
 		LoginState:         loginState,
 		UserInfo:           userInfo,
 		TenantName:         inputs.TenantName,
-		CustomTenantDomain: inputs.TenantCustomDomain,
+		TenantCustomDomain: inputs.TenantCustomDomain,
 	}, nil
 }
 
@@ -329,7 +329,7 @@ func (ctx CallbackContext) Session() *Session {
 		ExpiresAt:          expiresAt,
 		ExpiresIn:          expiresIn,
 		UserInfo:           ctx.UserInfo,
-		CustomTenantDomain: ctx.CustomTenantDomain,
+		TenantCustomDomain: ctx.TenantCustomDomain,
 		TenantName:         ctx.TenantName,
 	}
 }

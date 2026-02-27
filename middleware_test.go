@@ -17,9 +17,9 @@ func TestWithSessionContext_And_SessionFromContext(t *testing.T) {
 	}
 
 	ctx := WithSessionContext(context.Background(), session)
-	got := SessionFromContext(ctx)
+	got, ok := SessionFromContext(ctx)
 
-	if got == nil {
+	if !ok {
 		t.Fatal("Expected session from context, got nil")
 	}
 	if got.AccessToken != "tok-123" {
@@ -31,49 +31,9 @@ func TestWithSessionContext_And_SessionFromContext(t *testing.T) {
 }
 
 func TestSessionFromContext_Missing(t *testing.T) {
-	got := SessionFromContext(context.Background())
-	if got != nil {
+	_, ok := SessionFromContext(context.Background())
+	if ok {
 		t.Error("Expected nil session from empty context")
-	}
-}
-
-func TestSessionFromContext_WrongType(t *testing.T) {
-	ctx := context.WithValue(context.Background(), wristbandAuthContextKey{}, "not-a-session")
-	got := SessionFromContext(ctx)
-	if got != nil {
-		t.Error("Expected nil for wrong type in context")
-	}
-}
-
-func TestRequireAuthentication_Authenticated(t *testing.T) {
-	sessionManager := newMockSessionManager()
-	session := &Session{
-		AccessToken: "valid-token",
-		UserInfo:    UserInfoResponse{Sub: "user-1"},
-	}
-	sessionManager.sessions["test-session"] = session
-
-	app := WristbandApp{SessionManager: sessionManager}
-
-	var capturedSession *Session
-	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		capturedSession = SessionFromContext(r.Context())
-		w.WriteHeader(http.StatusOK)
-	})
-
-	req := httptest.NewRequest("GET", "/protected", nil)
-	res := httptest.NewRecorder()
-
-	app.RequireAuthentication(next).ServeHTTP(res, req)
-
-	if res.Code != http.StatusOK {
-		t.Errorf("Expected status %d, got %d", http.StatusOK, res.Code)
-	}
-	if capturedSession == nil {
-		t.Fatal("Expected session in context")
-	}
-	if capturedSession.UserInfo.Sub != "user-1" {
-		t.Errorf("Expected Sub %q in context, got %q", "user-1", capturedSession.UserInfo.Sub)
 	}
 }
 
@@ -150,10 +110,10 @@ func TestRefreshTokenIfExpired_NoSession(t *testing.T) {
 	req := httptest.NewRequest("GET", "/api/data", nil)
 	res := httptest.NewRecorder()
 
-	app.RefreshTokenIfExpired(next).ServeHTTP(res, req)
+	app.RequireAuthentication(next).ServeHTTP(res, req)
 
-	if !nextCalled {
-		t.Error("Next handler should be called when no session exists")
+	if nextCalled {
+		t.Error("Next handler should not be called when no session exists")
 	}
 }
 
@@ -187,7 +147,7 @@ func TestRefreshTokenIfExpired_TokenStillValid(t *testing.T) {
 	req := httptest.NewRequest("GET", "/api/data", nil)
 	res := httptest.NewRecorder()
 
-	app.RefreshTokenIfExpired(next).ServeHTTP(res, req)
+	app.RequireAuthentication(next).ServeHTTP(res, req)
 
 	if !nextCalled {
 		t.Error("Next handler should be called when token is still valid")
@@ -244,7 +204,7 @@ func TestRefreshTokenIfExpired_TokenExpired_RefreshSuccess(t *testing.T) {
 	req := httptest.NewRequest("GET", "/api/data", nil)
 	res := httptest.NewRecorder()
 
-	app.RefreshTokenIfExpired(next).ServeHTTP(res, req)
+	app.RequireAuthentication(next).ServeHTTP(res, req)
 
 	if !nextCalled {
 		t.Error("Next handler should be called after successful refresh")
@@ -299,7 +259,7 @@ func TestRefreshTokenIfExpired_TokenExpired_RefreshFails(t *testing.T) {
 	req := httptest.NewRequest("GET", "/api/data", nil)
 	res := httptest.NewRecorder()
 
-	app.RefreshTokenIfExpired(next).ServeHTTP(res, req)
+	app.RequireAuthentication(next).ServeHTTP(res, req)
 
 	if nextCalled {
 		t.Error("Next handler should not be called when refresh fails")
@@ -362,7 +322,7 @@ func TestRefreshTokenIfExpired_StoreSessionError(t *testing.T) {
 	req := httptest.NewRequest("GET", "/api/data", nil)
 	res := httptest.NewRecorder()
 
-	app.RefreshTokenIfExpired(next).ServeHTTP(res, req)
+	app.RequireAuthentication(next).ServeHTTP(res, req)
 
 	if nextCalled {
 		t.Error("Next handler should not be called when store fails")

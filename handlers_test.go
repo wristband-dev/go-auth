@@ -1,7 +1,6 @@
 package goauth
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -29,7 +28,7 @@ func newMockSessionManager() *mockSessionManager {
 	}
 }
 
-func (m *mockSessionManager) StoreSession(ctx context.Context, w http.ResponseWriter, r *http.Request, session *Session) error {
+func (m *mockSessionManager) StoreSession(_ http.ResponseWriter, _ *http.Request, session *Session) error {
 	if m.storeErr != nil {
 		return m.storeErr
 	}
@@ -37,7 +36,7 @@ func (m *mockSessionManager) StoreSession(ctx context.Context, w http.ResponseWr
 	return nil
 }
 
-func (m *mockSessionManager) GetSession(ctx context.Context, r *http.Request) (*Session, error) {
+func (m *mockSessionManager) GetSession(*http.Request) (*Session, error) {
 	if m.getErr != nil {
 		return nil, m.getErr
 	}
@@ -47,7 +46,7 @@ func (m *mockSessionManager) GetSession(ctx context.Context, r *http.Request) (*
 	return nil, fmt.Errorf("session not found")
 }
 
-func (m *mockSessionManager) ClearSession(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+func (m *mockSessionManager) ClearSession(http.ResponseWriter, *http.Request) error {
 	if m.clearErr != nil {
 		return m.clearErr
 	}
@@ -848,7 +847,7 @@ func TestCallbackContext_Session(t *testing.T) {
 			TenantID: "tenant-abc",
 		},
 		TenantName:         "acme",
-		CustomTenantDomain: "custom.acme.com",
+		TenantCustomDomain: "custom.acme.com",
 	}
 
 	session := ctx.Session()
@@ -874,8 +873,8 @@ func TestCallbackContext_Session(t *testing.T) {
 	if session.TenantName != "acme" {
 		t.Errorf("Expected TenantName %q, got %q", "acme", session.TenantName)
 	}
-	if session.CustomTenantDomain != "custom.acme.com" {
-		t.Errorf("Expected CustomTenantDomain %q, got %q", "custom.acme.com", session.CustomTenantDomain)
+	if session.TenantCustomDomain != "custom.acme.com" {
+		t.Errorf("Expected TenantCustomDomain %q, got %q", "custom.acme.com", session.TenantCustomDomain)
 	}
 }
 

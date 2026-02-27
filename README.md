@@ -151,9 +151,9 @@ The SDK provides a session manager interface that you need to implement:
 
 ```go
 type SessionManager interface {
-    StoreSession(ctx context.Context, w http.ResponseWriter, r *http.Request, session *goauth.Session) error
-    GetSession(ctx context.Context, r *http.Request) (*goauth.Session, error)
-    ClearSession(ctx context.Context, w http.ResponseWriter, r *http.Request) error
+    StoreSession(w http.ResponseWriter, r *http.Request, session *goauth.Session) error
+    GetSession(r *http.Request) (*goauth.Session, error)
+    ClearSession(w http.ResponseWriter, r *http.Request) error
 }
 ```
 
@@ -193,7 +193,7 @@ func NewStore() goauth.SessionManager {
 }
 
 // StoreSession implements the goauth.SessionManager interface
-func (m *GorillaSessionManager) StoreSession(_ context.Context, w http.ResponseWriter, r *http.Request, session *goauth.Session) error {
+func (m *GorillaSessionManager) StoreSession(w http.ResponseWriter, r *http.Request, session *goauth.Session) error {
     // Get existing session or create a new one
     sess, err := m.store.Get(r, SessionName)
     if err != nil {
@@ -223,7 +223,7 @@ func (m *GorillaSessionManager) StoreSession(_ context.Context, w http.ResponseW
 }
 
 // GetSession implements the goauth.SessionManager interface
-func (m *GorillaSessionManager) GetSession(_ context.Context, r *http.Request) (*goauth.Session, error) {
+func (m *GorillaSessionManager) GetSession(r *http.Request) (*goauth.Session, error) {
     // Get existing session
     sess, err := m.store.Get(r, SessionName)
     if err != nil {
@@ -247,7 +247,7 @@ func (m *GorillaSessionManager) GetSession(_ context.Context, r *http.Request) (
 }
 
 // ClearSession implements the goauth.SessionManager interface
-func (m *GorillaSessionManager) ClearSession(_ context.Context, w http.ResponseWriter, r *http.Request) error {
+func (m *GorillaSessionManager) ClearSession(w http.ResponseWriter, r *http.Request) error {
     // Get existing session
     sess, err := m.store.Get(r, SessionName)
     if err != nil {
@@ -691,7 +691,7 @@ When an error is returned, use `goauth.IsRedirectError` in case the request shou
 | LoginState         | LoginState       | Login context (return URL, nonce, code verifier, state).    |
 | UserInfo           | UserInfoResponse | User information from the Wristband Userinfo endpoint.      |
 | TenantName         | string           | The tenant name for the authenticated user.                 |
-| CustomTenantDomain | string           | Custom domain for the tenant.                               |
+| TenantCustomDomain | string           | Custom domain for the tenant.                               |
 
 **Example**
 

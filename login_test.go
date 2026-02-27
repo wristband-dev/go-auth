@@ -65,7 +65,7 @@ func TestResolveReturnURL_Empty(t *testing.T) {
 
 // --- loginBaseURL ---
 
-func TestLoginBaseURL_FromCustomTenantDomain(t *testing.T) {
+func TestLoginBaseURL_FromTenantCustomDomain(t *testing.T) {
 	ctx := newMockHTTPContext()
 	ctx.queryValues.Set("tenant_custom_domain", "custom.acme.com")
 

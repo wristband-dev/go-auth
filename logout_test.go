@@ -91,7 +91,7 @@ func TestWristbandAuth_LogoutURL_WithTenantedHost(t *testing.T) {
 	}
 }
 
-func TestWristbandAuth_LogoutURL_WithCustomTenantDomain(t *testing.T) {
+func TestWristbandAuth_LogoutURL_WithTenantCustomDomain(t *testing.T) {
 	authConfig := &AuthConfig{
 		ClientID:                         "test-client-id",
 		ClientSecret:                     "test-secret",
@@ -680,7 +680,7 @@ func TestNewLogoutConfig_WithAllOptions(t *testing.T) {
 func TestWithSession_SetsFromSession(t *testing.T) {
 	session := Session{
 		TenantName:         "session-tenant",
-		CustomTenantDomain: "session-custom.com",
+		TenantCustomDomain: "session-custom.com",
 	}
 	cfg := NewLogoutConfig(WithSession(session))
 
@@ -695,7 +695,7 @@ func TestWithSession_SetsFromSession(t *testing.T) {
 func TestWithSession_DoesNotOverrideExplicitValues(t *testing.T) {
 	session := Session{
 		TenantName:         "session-tenant",
-		CustomTenantDomain: "session-custom.com",
+		TenantCustomDomain: "session-custom.com",
 	}
 	cfg := NewLogoutConfig(
 		WithTenantName("explicit-tenant"),

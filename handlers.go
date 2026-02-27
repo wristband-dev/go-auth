@@ -1,7 +1,6 @@
 package goauth
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -19,7 +18,7 @@ type (
 		ExpiresIn          time.Duration    `json:"expiresIn"`
 		UserInfo           UserInfoResponse `json:"userInfo"`
 		TenantName         string           `json:"tenantName"`
-		CustomTenantDomain string           `json:"customTenantDomain"`
+		TenantCustomDomain string           `json:"tenantCustomDomain"`
 		// CustomData can be used for any additional session data.
 		CustomData map[string]any `json:"customData"`
 	}
@@ -27,13 +26,13 @@ type (
 	// SessionManager defines the interface for session management
 	SessionManager interface {
 		// StoreSession stores the session after successful authentication
-		StoreSession(ctx context.Context, w http.ResponseWriter, r *http.Request, session *Session) error
+		StoreSession(w http.ResponseWriter, r *http.Request, session *Session) error
 
 		// GetSession retrieves the current session
-		GetSession(ctx context.Context, r *http.Request) (*Session, error)
+		GetSession(r *http.Request) (*Session, error)
 
 		// ClearSession removes the current session
-		ClearSession(ctx context.Context, w http.ResponseWriter, r *http.Request) error
+		ClearSession(w http.ResponseWriter, r *http.Request) error
 	}
 )
 
@@ -102,8 +101,36 @@ func (app WristbandApp) LoginHandler(opts ...LoginOpt) http.HandlerFunc {
 	}
 }
 
+type (
+	// callbackHandlerConfig are the optional configuration for the CallbackHandler.
+	callbackHandlerConfig struct {
+		// redirectURL is the static url to redirect to after completing the callback.
+		redirectURL string
+	}
+
+	CallbackOption interface {
+		apply(options *callbackHandlerConfig)
+	}
+	callbackOptionFunc func(*callbackHandlerConfig)
+)
+
+func (f callbackOptionFunc) apply(options *callbackHandlerConfig) {
+	f(options)
+}
+
+// WithCallbackRedirectURL sets the url that the WristbandApp.CallbackHandler should redirect to upon success.
+func WithCallbackRedirectURL(url string) CallbackOption {
+	return callbackOptionFunc(func(options *callbackHandlerConfig) {
+		options.redirectURL = url
+	})
+}
+
 // CallbackHandler creates a middleware for handling the OAuth callback
-func (app WristbandApp) CallbackHandler() http.HandlerFunc {
+func (app WristbandApp) CallbackHandler(opts ...CallbackOption) http.HandlerFunc {
+	cfg := callbackHandlerConfig{}
+	for _, opt := range opts {
+		opt.apply(&cfg)
+	}
 	return func(res http.ResponseWriter, req *http.Request) {
 		// Avoid caching.
 		res.Header().Set("Cache-Control", "no-cache, no-store")
@@ -120,7 +147,7 @@ func (app WristbandApp) CallbackHandler() http.HandlerFunc {
 		}
 
 		// Store session using the session manager
-		if err := app.SessionManager.StoreSession(req.Context(), res, req, callbackContext.Session()); err != nil {
+		if err := app.SessionManager.StoreSession(res, req, callbackContext.Session()); err != nil {
 			http.Error(res, "Failed to store session", http.StatusInternalServerError)
 			return
 		}
@@ -133,6 +160,9 @@ func (app WristbandApp) CallbackHandler() http.HandlerFunc {
 
 		// Redirect to return URL or default location
 		redirectURL := "/"
+		if cfg.redirectURL != "" {
+			redirectURL = cfg.redirectURL
+		}
 		if url := callbackContext.LoginState.ReturnURL; url != "" {
 			redirectURL = url
 		}
@@ -157,11 +187,10 @@ func (app WristbandApp) LogoutHandler(opts ...LogoutOption) http.HandlerFunc {
 		// Avoid caching.
 		res.Header().Set("Cache-Control", "no-cache, no-store")
 		res.Header().Set("Pragma", "no-cache")
-		ctx := req.Context()
 		httpContext := app.HTTPContext(res, req)
 
 		// Get session from session manager
-		session, err := app.SessionManager.GetSession(ctx, req)
+		session, err := app.SessionManager.GetSession(req)
 		if err != nil {
 			if url, err := app.LogoutURL(httpContext, NewLogoutConfig()); err == nil {
 				// If no session, just redirect to Wristband logout
@@ -185,7 +214,7 @@ func (app WristbandApp) LogoutHandler(opts ...LogoutOption) http.HandlerFunc {
 		}
 
 		// Clear session
-		if err := app.SessionManager.ClearSession(req.Context(), res, req); err != nil {
+		if err := app.SessionManager.ClearSession(res, req); err != nil {
 			http.Error(res, "Failed to clear session", http.StatusInternalServerError)
 			return
 		}
@@ -234,7 +263,7 @@ func (app WristbandApp) SessionHandler(opts ...SessionHandlerOption) http.Handle
 	}
 
 	return func(res http.ResponseWriter, req *http.Request) {
-		session, err := app.SessionManager.GetSession(req.Context(), req)
+		session, err := app.SessionManager.GetSession(req)
 		if err != nil {
 			http.Error(res, "Unauthorized access: user not authenticated", http.StatusUnauthorized)
 			return
