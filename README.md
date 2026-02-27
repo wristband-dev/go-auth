@@ -185,8 +185,11 @@ type GorillaSessionManager struct {
     store sessions.Store
 }
 
-func NewStore() goauth.SessionManager {
+func NewStore(secret []byte, secureCookies bool) goauth.SessionManager {
     store := sessions.NewCookieStore(securecookie.GenerateRandomKey(32), securecookie.GenerateRandomKey(32))
+    store.Options.Secure = secureCookies
+    store.Options.HttpOnly = true
+    store.Options.SameSite = http.SameSiteLaxMode
     return &GorillaSessionManager{
         store: store,
     }
@@ -198,15 +201,11 @@ func (m *GorillaSessionManager) StoreSession(w http.ResponseWriter, r *http.Requ
     sess, err := m.store.Get(r, SessionName)
     if err != nil {
         // If there's an error getting the session, create a new one
-        // This can happen if the session was tampered with or is invalid
-        sess = sessions.NewSession(m.store, SessionName)
-        sess.Options = &sessions.Options{
-            Path:     "/",
-            MaxAge:   86400 * 30, // 30 days
-            HttpOnly: true,
-            Secure:   true, // Set to false only for local development
-            SameSite: http.SameSiteLaxMode,
-        }
+		// This can happen if the session was tampered with or is invalid
+		sess, err = m.store.New(r, SessionName)
+		if err != nil {
+			return err
+		}
     }
 
     // Serialize the session to JSON

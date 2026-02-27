@@ -141,6 +141,9 @@ func (cr *ConfigResolver) loadSdkConfig() (*SdkConfiguration, error) {
 	// Wait for the result
 	select {
 	case sdkConfig := <-cr.configPromise:
+		if sdkConfig == nil {
+			return nil, fmt.Errorf("failed to load sdk configuration")
+		}
 		return sdkConfig, nil
 	case <-time.After(30 * time.Second):
 		cr.configMutex.Lock()
