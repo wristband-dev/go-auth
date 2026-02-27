@@ -157,6 +157,8 @@ type SessionManager interface {
 }
 ```
 
+Required install `go get github.com/gorilla/sessions`
+
 Example implementation using `github.com/gorilla/sessions`:
 
 ```go
@@ -186,7 +188,7 @@ type GorillaSessionManager struct {
 }
 
 func NewStore(secret []byte, secureCookies bool) goauth.SessionManager {
-    store := sessions.NewCookieStore(securecookie.GenerateRandomKey(32), securecookie.GenerateRandomKey(32))
+    store := sessions.NewCookieStore(secret, nil)
     store.Options.Secure = secureCookies
     store.Options.HttpOnly = true
     store.Options.SameSite = http.SameSiteLaxMode
