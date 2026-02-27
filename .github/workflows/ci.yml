@@ -1,0 +1,68 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v4
+
+      - name: Set up Go Version
+        uses: actions/setup-go@v6
+        with:
+          go-version: 1.22.12
+
+      - name: Check formatting
+        run: |
+          gofmt -l -s -w .
+          git status
+          git diff --exit-code
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v4
+
+      - name: Set up Go Version
+        uses: actions/setup-go@v6
+        with:
+          go-version: 1.24.11
+
+      - name: Run linters
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.1.6
+          args: --verbose
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        go:
+          - "1.22"
+          - "1.23"
+          - "1.24"
+          - "1.25"
+    environment: build
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v4
+
+      - name: Set up Go Version
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ matrix.go }}
+
+      - name: Test
+        run: |
+          go test ./...
+          git status
+          git diff --exit-code

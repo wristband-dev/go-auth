@@ -1,0 +1,57 @@
+version: "2"
+run:
+  timeout: 5m
+linters:
+  enable:
+    - asasalint
+    - bidichk
+    - bodyclose
+    - containedctx
+    - gocheckcompilerdirectives
+    - govet
+    - ineffassign
+    - intrange
+    - makezero
+    - misspell
+    - nilerr
+    - nolintlint
+    - nosprintfhostport
+    - staticcheck
+    - revive
+    - unconvert
+    - usetesting
+    - wastedassign
+    - whitespace
+  disable:
+    - errcheck
+    - usestdlibvars
+  settings:
+    staticcheck:
+      checks:
+        - all
+        - -SA1019 # omit Deprecated check
+        - -QF1001
+        - -ST1003
+    revive:
+      rules:
+        - name: empty-block
+          disabled: true
+  exclusions:
+    rules:
+      # Exclude some linters from running on tests files.
+      - path: _test\.go
+        linters:
+          - intrange
+          - revive
+          - unused
+formatters:
+  enable:
+    - gci
+    - gofmt
+    - gofumpt
+    - goimports
+  settings:
+    gofmt:
+      rewrite-rules:
+        - pattern: 'interface{}'
+          replacement: 'any'

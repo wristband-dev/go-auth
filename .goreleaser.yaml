@@ -1,0 +1,42 @@
+# .goreleaser.yaml
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+
+# Since this is a library (not a binary), skip the build step
+builds:
+  - skip: true
+
+# Changelog configuration
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+  groups:
+    - title: Features
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: Bug fixes
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: Others
+      order: 999
+
+# GitHub release settings
+release:
+  github:
+    owner: wristband-dev
+    name: go-auth
+  draft: false
+  prerelease: auto
+  mode: replace
+  header: |
+    ## Installation
+
+    go get github.com/wristband-dev/go-auth@{{ .Tag }}
