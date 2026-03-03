@@ -36,7 +36,7 @@ This SDK provides complete authentication integration with Wristband, including:
 
 - **Login flow** - Redirect to Wristband and handle OAuth callbacks
 - **Session management** - Flexible session storage with pluggable session manager interface
-- **Token handling** - Automatic access token refresh and validation
+- **Token handling** - Automatic access token refresh
 - **Logout flow** - Token revocation and session cleanup
 - **Multi-tenancy** - Support for tenant subdomains and custom domains
 
@@ -62,14 +62,16 @@ Learn more about Wristband's authentication patterns:
 - [Usage](#usage)
   - [1) Initialize the SDK](#1-initialize-the-sdk)
   - [2) Set Up Session Storage](#2-set-up-session-storage)
-  - [3) Add Auth Endpoints](#3-add-auth-endpoints)
+  - [3) Set Up Auth Middleware](#2-set-up-auth-middleware)
+  - [4) Add Auth Endpoints](#4-add-auth-endpoints)
     - [Login Endpoint](#login-endpoint)
     - [Callback Endpoint](#callback-endpoint)
     - [Logout Endpoint](#logout-endpoint)
     - [Session Endpoint](#session-endpoint)
+    - [Mapping Auth Endpoints](#mapping-auth-endpoints)
     - [Token Endpoint (Optional)](#token-endpoint-optional)
-  - [4) Guard Your Protected APIs and Handle Token Refresh](#4-guard-your-protected-apis-and-handle-token-refresh)
-  - [5) Pass Your Access Token to Downstream APIs](#5-pass-your-access-token-to-downstream-apis)
+  - [5) Protect Your API Routes](#5-protect-your-api-routes)
+  - [6) Use Your Access Token with APIs](#6-use-your-access-token-with-apis)
 - [Auth Configuration Options](#auth-configuration-options)
   - [AuthConfig](#authconfig)
   - [Configuration with ConfigResolver](#configuration-with-configresolver)
@@ -82,6 +84,10 @@ Learn more about Wristband's authentication patterns:
 - [Related Wristband SDKs](#related-wristband-sdks)
 - [Wristband Multi-Tenant Go Demo App](#wristband-multi-tenant-go-demo-app)
 - [Questions](#questions)
+
+<br/>
+
+---
 
 <br/>
 
@@ -99,6 +105,8 @@ Before installing, ensure you have:
 
 ## Installation
 
+Add the `go-auth` package to your project:
+
 ```bash
 go get github.com/wristband-dev/go-auth
 ```
@@ -112,6 +120,8 @@ go get github.com/wristband-dev/go-auth
 First, create an instance of `WristbandAuth` in your Go application. Then, you can use this instance across your project.
 
 ```go
+// main.go
+
 package main
 
 import (
@@ -123,21 +133,21 @@ import (
 )
 
 func main() {
-	// Create the authentication configuration
-	authConfig := &goauth.AuthConfig{
-		ClientID:                         "your-client-id",
-		ClientSecret:                     "your-client-secret",
-		WristbandApplicationVanityDomain: "your-app.wristband.dev",
-	}
+    // Create the authentication configuration
+    authConfig := &goauth.AuthConfig{
+        ClientID:                         "your-client-id",
+        ClientSecret:                     "your-client-secret",
+        WristbandApplicationVanityDomain: "your-app.wristband.dev",
+    }
 
-	// Create the Wristband auth instance
-	wristbandAuth, err := authConfig.WristbandAuth(
-		goauth.WithLogoutRedirectURL("/goodbye"),
-		goauth.WithHTTPClient(&http.Client{Timeout: 30 * time.Second}),
-	)
-	if err != nil {
-		log.Fatal("Failed to create Wristband auth:", err)
-	}
+    // Create the Wristband auth instance
+    wristbandAuth, err := authConfig.WristbandAuth(
+        // Optional: You can also supply your own HTTP client
+        goauth.WithHTTPClient(&http.Client{Timeout: 30 * time.Second}),
+    )
+    if err != nil {
+        log.Fatal("Failed to create Wristband auth:", err)
+    }
 }
 ```
 
@@ -147,7 +157,11 @@ func main() {
 
 This Wristband authentication SDK is unopinionated about how you store and manage your application session data after the user has authenticated. We typically recommend encrypted cookie-based sessions due to it being lighter-weight and not requiring a backend session store like Redis or other technologies.
 
-The SDK provides a session manager interface that you need to implement:
+This guide shows an example of a lightweight implementation of a SessionManager using [github.com/gorilla/sessions](github.com/gorilla/sessions) that you can use in your own project.
+
+#### Implement the Session Manager
+
+The SDK defines a `SessionManager` interface that you need to implement. The session data is typically stored in an encrypted cookie, and on subsequent requests, the middleware decrypts the cookie and restores the session state. It defines three methods that your implementation must provide:
 
 ```go
 type SessionManager interface {
@@ -157,130 +171,205 @@ type SessionManager interface {
 }
 ```
 
-Required install `go get github.com/gorilla/sessions`
+1. First, run the following to download the Gorilla sessions library:
 
-Example implementation using `github.com/gorilla/sessions`:
+```bash
+go get github.com/gorilla/sessions
+```
+
+2. Then copy this implementation into your project (e.g. `session.go`):
 
 ```go
-import (
-    "context"
-    "encoding/json"
-    "errors"
-    "net/http"
+// session.go
 
-    "github.com/gorilla/securecookie"
-    "github.com/gorilla/sessions"
-    goauth "github.com/wristband-dev/go-auth"
+package main
+
+import (
+	"encoding/json"
+	"errors"
+	"net/http"
+
+	"github.com/gorilla/sessions"
+	goauth "github.com/wristband-dev/go-auth"
 )
 
 const (
-    // SessionName is the name used for the session cookie
-    SessionName = "session"
+	// SessionName is the name used for the session cookie
+	SessionName = "session"
 
-    // SessionKey is the key used to store auth data in the session
-    SessionKey = "auth_session"
+	// SessionKey is the key used to store auth data in the session
+	SessionKey = "auth_session"
 )
 
 // GorillaSessionManager implements the goauth.SessionManager interface
 // using gorilla/sessions for session management
 type GorillaSessionManager struct {
-    store sessions.Store
+	store sessions.Store
 }
 
-func NewStore(secret []byte, secureCookies bool) goauth.SessionManager {
-    store := sessions.NewCookieStore(secret, nil)
-    store.Options.Secure = secureCookies
-    store.Options.HttpOnly = true
-    store.Options.SameSite = http.SameSiteLaxMode
-    return &GorillaSessionManager{
-        store: store,
-    }
+func NewSessionStore(secret []byte, secureCookies bool) goauth.SessionManager {
+	store := sessions.NewCookieStore(secret, nil)
+	store.Options.Secure = secureCookies
+	store.Options.HttpOnly = true
+	store.Options.SameSite = http.SameSiteLaxMode
+	store.Options.MaxAge = 3600 // 1 hour
+	return &GorillaSessionManager{
+		store: store,
+	}
 }
 
 // StoreSession implements the goauth.SessionManager interface
 func (m *GorillaSessionManager) StoreSession(w http.ResponseWriter, r *http.Request, session *goauth.Session) error {
-    // Get existing session or create a new one
-    sess, err := m.store.Get(r, SessionName)
-    if err != nil {
-        // If there's an error getting the session, create a new one
+	// Get existing session or create a new one
+	sess, err := m.store.Get(r, SessionName)
+	if err != nil {
+		// If there's an error getting the session, create a new one
 		// This can happen if the session was tampered with or is invalid
 		sess, err = m.store.New(r, SessionName)
 		if err != nil {
 			return err
 		}
-    }
+	}
 
-    // Serialize the session to JSON
-    sessionJSON, err := json.Marshal(session)
-    if err != nil {
-        return err
-    }
+	// Serialize the session to JSON
+	sessionJSON, err := json.Marshal(session)
+	if err != nil {
+		return err
+	}
 
-    // Store the serialized session in the session store
-    sess.Values[SessionKey] = string(sessionJSON)
+	// Store the serialized session in the session store
+	sess.Values[SessionKey] = string(sessionJSON)
 
-    // Save the session
-    return sess.Save(r, w)
+	// Save the session
+	return sess.Save(r, w)
 }
 
 // GetSession implements the goauth.SessionManager interface
 func (m *GorillaSessionManager) GetSession(r *http.Request) (*goauth.Session, error) {
-    // Get existing session
-    sess, err := m.store.Get(r, SessionName)
-    if err != nil {
-        return nil, err
-    }
+	// Get existing session
+	sess, err := m.store.Get(r, SessionName)
+	if err != nil {
+		return nil, err
+	}
 
-    // Check if the session contains auth data
-    sessionJSON, ok := sess.Values[SessionKey]
-    if !ok {
-        return nil, errors.New("no auth session found")
-    }
+	// Check if the session contains auth data
+	sessionJSON, ok := sess.Values[SessionKey]
+	if !ok {
+		return nil, errors.New("no auth session found")
+	}
 
-    // Parse the serialized session
-    var authSession goauth.Session
-    err = json.Unmarshal([]byte(sessionJSON.(string)), &authSession)
-    if err != nil {
-        return nil, err
-    }
+	// Parse the serialized session
+	var authSession goauth.Session
+	err = json.Unmarshal([]byte(sessionJSON.(string)), &authSession)
+	if err != nil {
+		return nil, err
+	}
 
-    return &authSession, nil
+	return &authSession, nil
 }
 
 // ClearSession implements the goauth.SessionManager interface
 func (m *GorillaSessionManager) ClearSession(w http.ResponseWriter, r *http.Request) error {
-    // Get existing session
-    sess, err := m.store.Get(r, SessionName)
+	// Get existing session
+	sess, err := m.store.Get(r, SessionName)
+	if err != nil {
+		// If we can't get the session, that's fine - we wanted to clear it anyway
+		return nil
+	}
+
+	// Remove the auth data from the session
+	delete(sess.Values, SessionKey)
+
+	// Set session to expire
+	sess.Options.MaxAge = -1
+
+	// Save the session
+	return sess.Save(r, w)
+}
+```
+
+3. After creating your `SessionManager` implementation, you'll use it to create a Wristband app instance.
+
+```go
+// main.go
+
+package main
+
+import (
+    goauth "github.com/wristband-dev/go-auth"
+)
+
+func main() {
+    authConfig := &goauth.AuthConfig{
+        ClientID:                         "your-client-id",
+        ClientSecret:                     "your-client-secret",
+        WristbandApplicationVanityDomain: "your-app.wristband.dev",
+    }
+    wristbandAuth, err := authConfig.WristbandAuth()
     if err != nil {
-        // If we can't get the session, that's fine - we wanted to clear it anyway
-        return nil
+        // Handle error
     }
 
-    // Remove the auth data from the session
-    delete(sess.Values, SessionKey)
+    // ADD: Create session manager
+    // NOTE: You'll need to provide a secure, random 32-character secret as the secret value.
+    sessionManager := NewSessionStore("<your-generated-secret>", true)
 
-    // Set session to expire
-    sess.Options.MaxAge = -1
-
-    // Save the session
-    return sess.Save(r, w)
+    // ADD: Create the Wristband app with the session manager
+    app := wristbandAuth.NewApp(sessionManager)
 }
 ```
 
 <br>
 
-### 3) Add Auth Endpoints
+### 3) Set Up Auth Middleware
 
-There are **four core API endpoints** your FastAPI server should expose to facilitate authentication workflows in Wristband:
+Create an auth middleware using the `goauth.Middlewares` type in your project (e.g. `main.go` file). Apply `app.RequireAuthentication` to any handler that should require a valid authenticated session. This middleware retrieves the session from your configured `SessionManager`, verifies that the access token is still valid (refreshing it when necessary), and stores the session in the request context for downstream handlers. If no valid session exists, the request will receive a 401 Unauthorized response or be redirected to the login URL if token refresh fails.
+
+```go
+// main.go
+
+package main
+
+import (
+    goauth "github.com/wristband-dev/go-auth"
+)
+
+func main() {
+    authConfig := &goauth.AuthConfig{
+        ClientID:                         "your-client-id",
+        ClientSecret:                     "your-client-secret",
+        WristbandApplicationVanityDomain: "your-app.wristband.dev",
+    }
+    wristbandAuth, err := authConfig.WristbandAuth()
+    if err != nil {
+        // Handle error
+    }
+    sessionManager := NewSessionStore("<your-generated-secret>", true)
+    app := wristbandAuth.NewApp(sessionManager)
+
+    // ADD: Create middleware chain for protected endpoints
+    authMiddlewares := goauth.Middlewares{
+        app.RequireAuthentication
+    }
+}
+```
+
+<br>
+
+### 4) Add Auth Endpoints
+
+There are **four core API endpoints** your Go server should expose to facilitate authentication workflows in Wristband:
 
 - Login Endpoint
 - Callback Endpoint
 - Logout Endpoint
 - Session Endpoint
 
-You'll need to add these endpoints to your FastAPI routes. There's also one additional endpoint you can implement depending on your authentication needs:
+You'll need to add these endpoints to your Go routes. There's also one additional endpoint you can implement depending on your authentication needs:
 
 - Token Endpoint (optional)
+
+<br>
 
 #### Login Endpoint
 
@@ -291,15 +380,14 @@ The goal of the Login Endpoint is to initiate an auth request by redirecting to 
 app := wristbandAuth.NewApp(sessionManager)
 
 // Login Endpoint - initiates the auth request and redirects to Wristband
-http.HandleFunc("/login", app.LoginHandler(
-    // Optional: set default tenant behavior for login
-    goauth.WithDefaultTenantName("default-tenant"),
-))
+http.Handle("/api/auth/login", app.LoginHandler())
 ```
 
 **Options**
 
 Optional configuration can be provided using various `LoginOpt` functions. Refer to the [Login](#LoginOptions) section for more details.
+
+<br>
 
 #### Callback Endpoint
 
@@ -307,8 +395,15 @@ The goal of the Callback Endpoint is to receive incoming calls from Wristband af
 
 ```go
 // Callback Endpoint - completes auth and creates the application session
-http.HandleFunc("/callback", app.CallbackHandler())
+http.Handle("/api/auth/callback",
+  app.CallbackHandler(
+    // Replace with your own default return URL.
+    goauth.WithCallbackRedirectURL("http://localhost:5173/home"),
+  ),
+)
 ```
+
+<br>
 
 #### Logout Endpoint
 
@@ -316,71 +411,174 @@ The goal of the Logout Endpoint is to destroy the application's session that was
 
 ```go
 // Logout Endpoint - revokes refresh token, clears session, redirects to Wristband logout
-http.HandleFunc("/logout", app.LogoutHandler(
-    goauth.WithRedirectURL("/goodbye"),
-))
+http.Handle("/api/auth/logout", app.LogoutHandler())
 ```
 
 **Options**
 
 Optional configuration can be provided using various `LogoutOption` functions. Refer to the [Logout API](#LogoutConfig) section for more details.
 
+<br>
 
 #### Session Endpoint
 
 > [!NOTE]
 > This endpoint is required for Wristband frontend SDKs to function. For more details, see the [Wristband Session Management documentation](https://docs.wristband.dev/docs/session-management-backend-server).
 
-Wristband frontend SDKs require a Session Endpoint in your backend to verify authentication status and retrieve session metadata. Create a protected session endpoint that uses `session.get_session_response()` to return the session response format expected by Wristband's frontend SDKs. The response model will always have a `user_id` and a `tenant_id` in it. You can include any additional data for your frontend by customizing the `metadata` parameter (optional), which requires JSON-serializable values. **The response must not be cached**.
+Wristband frontend SDKs require a Session Endpoint in your backend to verify authentication status and retrieve session metadata. Create a protected session endpoint that uses `app.SessionHandler()` to return the session response format expected by Wristband's frontend SDKs. The response model will always have a `UserId` and a `TenantId` in it. You can include any additional data for your frontend by customizing the `Metadata` parameter (optional), which requires JSON-serializable values. **The response must not be cached**.
+
+> **⚠️ Important:**
+> Make sure to protect this endpoint by using the auth middleware!
 
 ```go
 // Session Endpoint - returns session data to the frontend
-http.HandleFunc("/api/session", app.SessionHandler())
+http.Handle(
+    "/api/auth/session",
+    authMiddlewares.Apply(app.SessionHandler())
+)
 ```
+
+The Session Endpoint returns a `SessionEndpointResponse` to your frontend:
+
+```json
+{
+  "tenantId": "tenant_abc123",
+  "userId": "user_xyz789",
+  "metadata": {
+    "foo": "bar",
+    // Any other optional data you provide...
+  }
+}
+```
+
+<br>
+
+#### Mapping Auth Endpoints
+
+After implementing the core auth endpoints, make sure to include them in your Go application `main.go` file.
+
+```go
+// main.go
+
+package main
+
+import (
+    goauth "github.com/wristband-dev/go-auth"
+)
+
+func main() {
+    authConfig := &goauth.AuthConfig{
+        ClientID:                         "your-client-id",
+        ClientSecret:                     "your-client-secret",
+        WristbandApplicationVanityDomain: "your-app.wristband.dev",
+    }
+    wristbandAuth, err := authConfig.WristbandAuth()
+    if err != nil {
+        // Handle error
+    }
+    sessionManager := NewSessionStore("<your-generated-secret>", true)
+    app := wristbandAuth.NewApp(sessionManager)
+    authMiddlewares := goauth.Middlewares{
+        app.RequireAuthentication
+    }
+
+    // ADD: Map auth endpoints
+    http.Handle("/api/auth/login", app.LoginHandler())
+    http.Handle(
+        "/api/auth/callback",
+        app.CallbackHandler(
+            goauth.WithCallbackRedirectURL("<default_return_url>")
+        )
+    )
+    http.Handle("/api/auth/logout", app.LogoutHandler())
+    http.Handle(
+        "/api/auth/session",
+        authMiddlewares.Apply(app.SessionHandler())
+    )
+}
+```
+
+<br>
 
 #### Token Endpoint (Optional)
 
-The Token Endpoint returns the current access token to the frontend. This is useful for single-page applications (SPAs) that need to make API calls directly from the browser.
+> [!NOTE]
+> This endpoint is required when your frontend needs to make authenticated API requests directly to Wristband or other protected services. For more details, see the [Wristband documentation on using access tokens from the frontend](https://docs.wristband.dev/docs/authenticating-api-requests-with-bearer-tokens#using-access-tokens-from-the-frontend).
+>
+> If your application doesn't need frontend access to tokens (e.g., all API calls go through your backend), you can skip this endpoint.
+
+Some applications require the frontend to make direct API calls to Wristband or other protected services using the user's access token. The Token Endpoint provides a secure way for your frontend to retrieve the current access token and its expiration time without exposing it in the session cookie or in browser storage.
+
+Create a protected token endpoint that uses `app.TokenHandler()` to return the token data expected by Wristband's frontend SDKs. **The response must not be cached**.
+
+> **⚠️ Important:**
+> Make sure to protect this endpoint by using the auth middleware!
+
+```go
+// Token Endpoint - returns token data to the frontend
+http.Handle(
+    "/api/auth/token",
+    authMiddlewares.Apply(app.TokenHandler())
+)
+```
+
+The Token Endpoint returns a `TokenEndpointResponse` to your frontend:
+
+```json
+{
+  "accessToken": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "expiresAt": 1735689600000
+}
+```
+
+Your frontend can then use the `accessToken` in the Authorization header when making API requests:
+
+```typescript
+const tokenResponse = await fetch('/api/auth/token');
+const { accessToken } = await tokenResponse.json();
+
+// Use token to call Wristband API
+const userResponse = await fetch('https://<your-wristband-app-vanity_domain>/api/v1/users/123', {
+  headers: {
+    'Authorization': `Bearer ${accessToken}`
+  }
+});
+```
+
+<br>
+
+### 5) Protect Your API Routes
+
+To protect an endpoint from unauthenticated access, apply the auth middleware as shown below:
+
+```go
+// Protected endpoint handler
+protectedHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+    w.Header().Set("Content-Type", "application/json")
+    w.WriteHeader(http.StatusOK)
+    w.Write([]byte(`{"message": "This is a protected route"}`))
+})
+
+// Apply middleware to the registered protected endpoint
+http.Handle("/api/protected", authMiddlewares.Apply(protectedHandler))
+```
+
+Now, if somebody tries to call this API without a valid session, a `401 Unauthorized` response will be returned.
+
+<br>
+
+### 6) Use Your Access Token with APIs
 
 > [!NOTE]
-> Only expose this endpoint if your frontend needs to make direct API calls with the access token. For server-side rendering or API proxying, you can keep tokens server-side only.
+> This section is only applicable if you need to call Wristband APIs or protect your own backend services with Wristband tokens.
 
-```go
-// Token Endpoint - returns access token for frontend API calls
-http.HandleFunc("/api/token", func(w http.ResponseWriter, r *http.Request) {
-    session := goauth.SessionFromContext(r.Context())
-    if session == nil {
-        http.Error(w, "Unauthorized", http.StatusUnauthorized)
-        return
-    }
+If you intend to utilize Wristband APIs within your application or secure any backend APIs or downstream services using the access token provided by Wristband, you must include this token in the `Authorization` HTTP request header.
 
-    response := map[string]interface{}{
-        "accessToken": session.AccessToken,
-        "expiresAt":   session.ExpiresAt,
-    }
-
-    w.Header().Set("Content-Type", "application/json")
-    json.NewEncoder(w).Encode(response)
-})
+```bash
+Authorization: Bearer <access_token_value>
 ```
 
-<br>
-
-### 4) Guard Your Protected APIs and Handle Token Refresh
-
-Create middleware to protect your APIs and handle token refresh:
-
-```go
-// Use built-in middleware to require auth and auto-refresh access tokens
-protected := app.RequireAuthentication(app.RefreshTokenIfExpired(protectedHandler))
-http.Handle("/api/protected", protected)
-```
-
-<br>
-
-### 5) Pass Your Access Token to Downstream APIs
-
-If you need to call Wristband APIs or protect your downstream APIs:
+When using auth middleware, the session is automatically added to the request context. You can access it using `goauth.SessionFromContext` in order to get the access token:
 
 ```go
 func apiCallHandler(w http.ResponseWriter, r *http.Request) {
@@ -415,6 +613,14 @@ func apiCallHandler(w http.ResponseWriter, r *http.Request) {
     io.Copy(w, resp.Body)
 }
 ```
+
+#### Using Access Tokens from the Frontend
+
+For scenarios where your frontend needs to make direct API calls with the user's access token, use the [Token Endpoint](#token-endpoint-optional) to securely retrieve the current access token.
+
+<br>
+
+---
 
 <br>
 
@@ -713,8 +919,8 @@ http.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
         AccessToken:  result.AccessToken,
         RefreshToken: result.RefreshToken,
         ExpiresAt:    result.ExpiresAt,
-        UserID:       result.UserInfo.Sub,
-        TenantID:     result.TenantID,
+        UserId:       result.UserInfo.Sub,
+        TenantId:     result.TenantId,
     }
     sessionManager.StoreSession(r.Context(), w, r, session)
     http.Redirect(w, r, result.RedirectURL, http.StatusFound)
@@ -809,7 +1015,8 @@ Checks if the access token is expired (or about to expire based on `TokenExpirat
 | Parameter    | Type   | Required | Description                                                |
 |--------------|--------|----------|------------------------------------------------------------|
 | refreshToken | string | Yes      | The refresh token to use for obtaining a new access token. |
-| expiresAt    | int64  | Yes      | Unix timestamp when the current access token expires.      |
+| expiresAt    | int64  | Yes      | Absolute expiration time of the current access token in milliseconds since the Unix epoch. |
+
 
 **Returns**
 
@@ -864,14 +1071,17 @@ func refreshMiddleware(next http.Handler) http.Handler {
 
 <br>
 
+---
+
+<br>
+
 ## Related Wristband SDKs
 
-Wristband provides SDKs for multiple frameworks:
+This SDK integrates with other Wristband SDKs to provide a complete authentication solution:
 
-- [Express SDK](https://github.com/wristband-dev/express-auth)
-- [Next.js SDK](https://github.com/wristband-dev/nextjs-auth)
-- [FastAPI SDK](https://github.com/wristband-dev/fastapi-auth)
-- [Django SDK](https://github.com/wristband-dev/django-auth)
+**[@wristband/react-client-auth](https://github.com/wristband-dev/react-client-auth)**
+
+For handling client-side authentication and session management in your React frontend, check out the Wristband React Client Auth SDK. It integrates seamlessly with this backend SDK by consuming the Session and Token endpoints you create. Refer to that GitHub repository for more information on frontend authentication patterns.
 
 <br>
 

@@ -4,21 +4,20 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
-	"time"
 )
 
 type (
 	// Session represents the user session after successful authentication
 	Session struct {
-		AccessToken  string `json:"accessToken"`
-		RefreshToken string `json:"refreshToken"`
-		IDToken      string `json:"-"`
-		// ExpiresAt is the expiration time of the access token.
-		ExpiresAt          time.Time        `json:"expiresAt"`
-		ExpiresIn          time.Duration    `json:"expiresIn"`
-		UserInfo           UserInfoResponse `json:"userInfo"`
-		TenantName         string           `json:"tenantName"`
-		TenantCustomDomain string           `json:"tenantCustomDomain"`
+		AccessToken          string           `json:"accessToken"`
+		RefreshToken         string           `json:"refreshToken"`
+		ExpiresAt            int64            `json:"expiresAt"`
+		IdentityProviderName string           `json:"identityProviderName"`
+		UserInfo             UserInfoResponse `json:"userInfo"`
+		UserId               string           `json:"userId"`
+		TenantId             string           `json:"tenantId"`
+		TenantName           string           `json:"tenantName"`
+		TenantCustomDomain   string           `json:"tenantCustomDomain"`
 		// CustomData can be used for any additional session data.
 		CustomData map[string]any `json:"customData"`
 	}
@@ -87,8 +86,6 @@ func (app WristbandApp) LoginHandler(opts ...LoginOpt) http.HandlerFunc {
 		res.Header().Set("Cache-Control", "no-cache, no-store")
 		res.Header().Set("Pragma", "no-cache")
 		httpCtx := app.HTTPContext(res, req)
-		res.Header().Set("Cache-Control", "no-cache, no-store")
-		res.Header().Set("Pragma", "no-cache")
 
 		// Build authorization URL
 		authURL, err := app.HandleLogin(httpCtx, options)
@@ -141,6 +138,7 @@ func (app WristbandApp) CallbackHandler(opts ...CallbackOption) http.HandlerFunc
 		if err != nil {
 			if redirectError, ok := IsRedirectError(err); ok {
 				http.Redirect(res, req, redirectError.URL, http.StatusSeeOther)
+				return
 			}
 			http.Error(res, "Failed to handle callback", http.StatusInternalServerError)
 			return
@@ -206,6 +204,7 @@ func (app WristbandApp) LogoutHandler(opts ...LogoutOption) http.HandlerFunc {
 		url, err := app.LogoutURL(httpContext, logoutCfg)
 		if err != nil {
 			http.Error(res, err.Error(), http.StatusInternalServerError)
+			return
 		}
 
 		// Try to revoke refresh token
@@ -224,10 +223,10 @@ func (app WristbandApp) LogoutHandler(opts ...LogoutOption) http.HandlerFunc {
 	}
 }
 
-// SessionResponse is the structure returned by the SessionHandler.
-type SessionResponse struct {
-	UserID   string `json:"userId"`
-	TenantID string `json:"tenantId"`
+// SessionEndpointResponse is the structure returned by the SessionHandler.
+type SessionEndpointResponse struct {
+	UserId   string `json:"userId"`
+	TenantId string `json:"tenantId"`
 	Metadata any    `json:"metadata"`
 }
 
@@ -269,9 +268,9 @@ func (app WristbandApp) SessionHandler(opts ...SessionHandlerOption) http.Handle
 			return
 		}
 
-		resp := SessionResponse{
-			UserID:   session.UserInfo.Sub,
-			TenantID: session.UserInfo.TenantID,
+		resp := SessionEndpointResponse{
+			UserId:   session.UserId,
+			TenantId: session.TenantId,
 		}
 		if cfg.sessionMetadataExtractor != nil {
 			resp.Metadata = cfg.sessionMetadataExtractor(*session)
@@ -283,8 +282,46 @@ func (app WristbandApp) SessionHandler(opts ...SessionHandlerOption) http.Handle
 			http.Error(res, "problem serializing session data", http.StatusInternalServerError)
 			return
 		}
-		res.WriteHeader(http.StatusOK)
+		res.Header().Set("Cache-Control", "no-cache, no-store")
+		res.Header().Set("Pragma", "no-cache")
 		res.Header().Set("Content-Type", "application/json")
+		res.WriteHeader(http.StatusOK)
+		_, err = res.Write(respBytes)
+		if err != nil {
+			http.Error(res, "problem writing response", http.StatusInternalServerError)
+			return
+		}
+	}
+}
+
+// TokenEndpointResponse is the structure returned by the TokenHandler.
+type TokenEndpointResponse struct {
+	AccessToken string `json:"accessToken"`
+	ExpiresAt   int64  `json:"expiresAt"`
+}
+
+// TokenHandler is an http.HandlerFunc that returns the access token for the current session.
+func (app WristbandApp) TokenHandler() http.HandlerFunc {
+	return func(res http.ResponseWriter, req *http.Request) {
+		session, err := app.SessionManager.GetSession(req)
+		if err != nil {
+			http.Error(res, "Unauthorized access: user not authenticated", http.StatusUnauthorized)
+			return
+		}
+
+		resp := TokenEndpointResponse{
+			AccessToken: session.AccessToken,
+			ExpiresAt:   session.ExpiresAt,
+		}
+		respBytes, err := json.Marshal(resp)
+		if err != nil {
+			http.Error(res, "problem serializing token data", http.StatusInternalServerError)
+			return
+		}
+		res.Header().Set("Cache-Control", "no-cache, no-store")
+		res.Header().Set("Pragma", "no-cache")
+		res.Header().Set("Content-Type", "application/json")
+		res.WriteHeader(http.StatusOK)
 		_, err = res.Write(respBytes)
 		if err != nil {
 			http.Error(res, "problem writing response", http.StatusInternalServerError)

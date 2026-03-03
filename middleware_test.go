@@ -121,7 +121,7 @@ func TestRefreshTokenIfExpired_TokenStillValid(t *testing.T) {
 	sessionManager := newMockSessionManager()
 	session := &Session{
 		AccessToken: "valid-token",
-		ExpiresAt:   time.Now().Add(time.Hour),
+		ExpiresAt:   time.Now().Add(time.Hour).UnixMilli(),
 	}
 	sessionManager.sessions["test-session"] = session
 
@@ -174,7 +174,7 @@ func TestRefreshTokenIfExpired_TokenExpired_RefreshSuccess(t *testing.T) {
 	session := &Session{
 		AccessToken:  "expired-token",
 		RefreshToken: "old-refresh-token",
-		ExpiresAt:    time.Now().Add(-time.Hour), // expired
+		ExpiresAt:    time.Now().Add(-time.Hour).UnixMilli(), // expired
 	}
 	sessionManager.sessions["test-session"] = session
 
@@ -232,7 +232,7 @@ func TestRefreshTokenIfExpired_TokenExpired_RefreshFails(t *testing.T) {
 	session := &Session{
 		AccessToken:  "expired-token",
 		RefreshToken: "invalid-refresh-token",
-		ExpiresAt:    time.Now().Add(-time.Hour),
+		ExpiresAt:    time.Now().Add(-time.Hour).UnixMilli(),
 	}
 	sessionManager.sessions["test-session"] = session
 
@@ -293,7 +293,7 @@ func TestRefreshTokenIfExpired_StoreSessionError(t *testing.T) {
 	session := &Session{
 		AccessToken:  "expired-token",
 		RefreshToken: "refresh-token",
-		ExpiresAt:    time.Now().Add(-time.Hour),
+		ExpiresAt:    time.Now().Add(-time.Hour).UnixMilli(),
 	}
 	sessionManager.sessions["test-session"] = session
 	sessionManager.storeErr = fmt.Errorf("store failed")
