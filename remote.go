@@ -13,8 +13,8 @@ type UserInfoResponse struct {
 	Name          string   `json:"name"`
 	Email         string   `json:"email"`
 	EmailVerified bool     `json:"email_verified"`
-	TenantID      string   `json:"tnt_id"`
-	IDPName       string   `json:"idp_name"`
+	TenantId      string   `json:"tnt_id"`
+	IdpName       string   `json:"idp_name"`
 	Roles         []string `json:"roles"`
 	// Add additional fields as needed
 	CustomClaims map[string]any `json:"custom_claims"`

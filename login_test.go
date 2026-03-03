@@ -779,7 +779,7 @@ func TestHandleCallback_Success(t *testing.T) {
 			Sub:      "user-123",
 			Name:     "Alice",
 			Email:    "alice@example.com",
-			TenantID: "tenant-abc",
+			TenantId: "tenant-abc",
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(userInfo)

@@ -302,6 +302,13 @@ func (auth WristbandAuth) HandleCallback(httpCtx HTTPContext) (*CallbackContext,
 		return nil, fmt.Errorf("failed to exchange code for tokens: %v", err)
 	}
 
+	// Calculate token expiration buffer
+	bufferSec := auth.configResolver.GetTokenExpirationBuffer()
+	tokenResponse.ExpiresIn -= bufferSec
+	if tokenResponse.ExpiresIn < 0 {
+		tokenResponse.ExpiresIn = 0
+	}
+
 	// Get user info with access token
 	userInfo, err := auth.getUserInfo(tokenResponse.AccessToken)
 	if err != nil {
@@ -321,16 +328,16 @@ func (auth WristbandAuth) HandleCallback(httpCtx HTTPContext) (*CallbackContext,
 // Session returns a *Session object from the callback context.
 func (ctx CallbackContext) Session() *Session {
 	expiresIn := time.Second * time.Duration(ctx.TokenResponse.ExpiresIn)
-	expiresAt := time.Now().UTC().Add(expiresIn)
 	return &Session{
-		AccessToken:        ctx.TokenResponse.AccessToken,
-		RefreshToken:       ctx.TokenResponse.RefreshToken,
-		IDToken:            ctx.TokenResponse.IDToken,
-		ExpiresAt:          expiresAt,
-		ExpiresIn:          expiresIn,
-		UserInfo:           ctx.UserInfo,
-		TenantCustomDomain: ctx.TenantCustomDomain,
-		TenantName:         ctx.TenantName,
+		AccessToken:          ctx.TokenResponse.AccessToken,
+		ExpiresAt:            time.Now().UTC().Add(expiresIn).UnixMilli(),
+		IdentityProviderName: ctx.UserInfo.IdpName,
+		RefreshToken:         ctx.TokenResponse.RefreshToken,
+		TenantCustomDomain:   ctx.TenantCustomDomain,
+		TenantId:             ctx.UserInfo.TenantId,
+		TenantName:           ctx.TenantName,
+		UserId:               ctx.UserInfo.Sub,
+		UserInfo:             ctx.UserInfo,
 	}
 }
 

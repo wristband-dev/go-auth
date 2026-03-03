@@ -17,8 +17,8 @@ func TestUserInfoResponse_JSONMarshaling(t *testing.T) {
 		Name:          "Test User",
 		Email:         "test@example.com",
 		EmailVerified: true,
-		TenantID:      "tenant-123",
-		IDPName:       "google",
+		TenantId:      "tenant-123",
+		IdpName:       "google",
 		Roles:         []string{"admin", "user"},
 		CustomClaims: map[string]any{
 			"department": "engineering",
@@ -53,11 +53,11 @@ func TestUserInfoResponse_JSONMarshaling(t *testing.T) {
 	if unmarshaled.EmailVerified != userInfo.EmailVerified {
 		t.Errorf("Expected EmailVerified %v, got %v", userInfo.EmailVerified, unmarshaled.EmailVerified)
 	}
-	if unmarshaled.TenantID != userInfo.TenantID {
-		t.Errorf("Expected TenantID %s, got %s", userInfo.TenantID, unmarshaled.TenantID)
+	if unmarshaled.TenantId != userInfo.TenantId {
+		t.Errorf("Expected TenantId %s, got %s", userInfo.TenantId, unmarshaled.TenantId)
 	}
-	if unmarshaled.IDPName != userInfo.IDPName {
-		t.Errorf("Expected IDPName %s, got %s", userInfo.IDPName, unmarshaled.IDPName)
+	if unmarshaled.IdpName != userInfo.IdpName {
+		t.Errorf("Expected IdpName %s, got %s", userInfo.IdpName, unmarshaled.IdpName)
 	}
 
 	// Verify roles
@@ -91,8 +91,8 @@ func TestUserInfoResponse_JSONTags(t *testing.T) {
 		Name:          "Test User",
 		Email:         "test@example.com",
 		EmailVerified: true,
-		TenantID:      "tenant-123",
-		IDPName:       "google",
+		TenantId:      "tenant-123",
+		IdpName:       "google",
 		Roles:         []string{"user"},
 		CustomClaims:  map[string]any{"key": "value"},
 	}
@@ -206,8 +206,8 @@ func TestWristbandAuth_getUserInfo_Success(t *testing.T) {
 			Name:          "John Doe",
 			Email:         "john@example.com",
 			EmailVerified: true,
-			TenantID:      "tenant-123",
-			IDPName:       "google",
+			TenantId:      "tenant-123",
+			IdpName:       "google",
 			Roles:         []string{"admin", "user"},
 			CustomClaims: map[string]any{
 				"department": "engineering",
@@ -248,11 +248,11 @@ func TestWristbandAuth_getUserInfo_Success(t *testing.T) {
 	if !userInfo.EmailVerified {
 		t.Error("Expected EmailVerified to be true")
 	}
-	if userInfo.TenantID != "tenant-123" {
-		t.Errorf("Expected TenantID 'tenant-123', got %s", userInfo.TenantID)
+	if userInfo.TenantId != "tenant-123" {
+		t.Errorf("Expected TenantId 'tenant-123', got %s", userInfo.TenantId)
 	}
-	if userInfo.IDPName != "google" {
-		t.Errorf("Expected IDPName 'google', got %s", userInfo.IDPName)
+	if userInfo.IdpName != "google" {
+		t.Errorf("Expected IdpName 'google', got %s", userInfo.IdpName)
 	}
 
 	expectedRoles := []string{"admin", "user"}
@@ -539,8 +539,8 @@ func BenchmarkUserInfoResponse_JSONMarshaling(b *testing.B) {
 		Name:          "John Doe",
 		Email:         "john@example.com",
 		EmailVerified: true,
-		TenantID:      "tenant-123",
-		IDPName:       "google",
+		TenantId:      "tenant-123",
+		IdpName:       "google",
 		Roles:         []string{"admin", "user", "viewer"},
 		CustomClaims: map[string]any{
 			"department": "engineering",
@@ -564,8 +564,8 @@ func BenchmarkUserInfoResponse_JSONUnmarshaling(b *testing.B) {
 		Name:          "John Doe",
 		Email:         "john@example.com",
 		EmailVerified: true,
-		TenantID:      "tenant-123",
-		IDPName:       "google",
+		TenantId:      "tenant-123",
+		IdpName:       "google",
 		Roles:         []string{"admin", "user", "viewer"},
 		CustomClaims: map[string]any{
 			"department": "engineering",
@@ -596,8 +596,8 @@ func BenchmarkWristbandAuth_getUserInfo(b *testing.B) {
 			Name:          "John Doe",
 			Email:         "john@example.com",
 			EmailVerified: true,
-			TenantID:      "tenant-123",
-			IDPName:       "google",
+			TenantId:      "tenant-123",
+			IdpName:       "google",
 			Roles:         []string{"admin", "user"},
 			CustomClaims: map[string]any{
 				"department": "engineering",

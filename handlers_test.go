@@ -160,15 +160,13 @@ func TestSession_JSONMarshaling(t *testing.T) {
 	session := &Session{
 		AccessToken:  "test-access-token",
 		RefreshToken: "test-refresh-token",
-		IDToken:      "test-id-token", // Should be omitted from JSON
-		ExpiresAt:    now,
-		ExpiresIn:    time.Hour,
+		ExpiresAt:    now.UnixMilli(),
 		UserInfo: UserInfoResponse{
 			Sub:      "test-user",
 			Email:    "test@example.com",
 			Name:     "Test User",
-			TenantID: "test-tenant",
-			IDPName:  "test-idp",
+			TenantId: "test-tenant",
+			IdpName:  "test-idp",
 		},
 	}
 
@@ -532,10 +530,12 @@ func TestWristbandApp_LogoutHandler_ClearSessionError(t *testing.T) {
 func TestWristbandApp_SessionHandler_Success(t *testing.T) {
 	sessionManager := newMockSessionManager()
 	session := &Session{
+		UserId:   "test-user",
+		TenantId: "test-tenant-id",
 		UserInfo: UserInfoResponse{
 			Sub:      "test-user",
 			Email:    "test@example.com",
-			TenantID: "test-tenant-id",
+			TenantId: "test-tenant-id",
 		},
 	}
 	sessionManager.sessions["test-session"] = session
@@ -558,17 +558,17 @@ func TestWristbandApp_SessionHandler_Success(t *testing.T) {
 		t.Error("Content-Type should be application/json")
 	}
 
-	var response SessionResponse
+	var response SessionEndpointResponse
 	err := json.Unmarshal(res.Body.Bytes(), &response)
 	if err != nil {
 		t.Fatalf("Failed to unmarshal response: %v", err)
 	}
 
-	if response.UserID != session.UserInfo.Sub {
-		t.Errorf("Expected UserID %s, got %s", session.UserInfo.Sub, response.UserID)
+	if response.UserId != session.UserInfo.Sub {
+		t.Errorf("Expected UserId %s, got %s", session.UserInfo.Sub, response.UserId)
 	}
-	if response.TenantID != session.UserInfo.TenantID {
-		t.Errorf("Expected TenantID %s, got %s", session.UserInfo.TenantID, response.TenantID)
+	if response.TenantId != session.UserInfo.TenantId {
+		t.Errorf("Expected TenantId %s, got %s", session.UserInfo.TenantId, response.TenantId)
 	}
 	if response.Metadata == nil {
 		t.Error("Metadata should not be nil")
@@ -578,9 +578,11 @@ func TestWristbandApp_SessionHandler_Success(t *testing.T) {
 func TestWristbandApp_SessionHandler_WithCustomMetadataExtractor(t *testing.T) {
 	sessionManager := newMockSessionManager()
 	session := &Session{
+		UserId:   "test-user",
+		TenantId: "test-tenant-id",
 		UserInfo: UserInfoResponse{
 			Sub:      "test-user-id",
-			TenantID: "test-tenant-id",
+			TenantId: "test-tenant-id",
 			Name:     "Test User",
 		},
 	}
@@ -605,7 +607,7 @@ func TestWristbandApp_SessionHandler_WithCustomMetadataExtractor(t *testing.T) {
 		t.Errorf("Expected status %d, got %d", http.StatusOK, res.Code)
 	}
 
-	var response SessionResponse
+	var response SessionEndpointResponse
 	err := json.Unmarshal(res.Body.Bytes(), &response)
 	if err != nil {
 		t.Fatalf("Failed to unmarshal response: %v", err)
@@ -650,9 +652,11 @@ func TestWristbandApp_SessionHandler_NoSession(t *testing.T) {
 func TestWristbandApp_SessionHandler_MarshalError(t *testing.T) {
 	sessionManager := newMockSessionManager()
 	session := &Session{
+		UserId:   "test-user",
+		TenantId: "test-tenant-id",
 		UserInfo: UserInfoResponse{
 			Sub:      "test-user-id",
-			TenantID: "test-tenant-id",
+			TenantId: "test-tenant-id",
 		},
 	}
 	sessionManager.sessions["test-session"] = session
@@ -679,12 +683,12 @@ func TestWristbandApp_SessionHandler_MarshalError(t *testing.T) {
 	}
 }
 
-// Test SessionResponse struct
+// Test SessionEndpointResponse struct
 
-func TestSessionResponse_JSONMarshaling(t *testing.T) {
-	response := SessionResponse{
-		UserID:   "test-user-id",
-		TenantID: "test-tenant-id",
+func TestSessionEndpointResponse_JSONMarshaling(t *testing.T) {
+	response := SessionEndpointResponse{
+		UserId:   "test-user-id",
+		TenantId: "test-tenant-id",
 		Metadata: map[string]string{
 			"role":  "admin",
 			"email": "test@example.com",
@@ -693,20 +697,20 @@ func TestSessionResponse_JSONMarshaling(t *testing.T) {
 
 	data, err := json.Marshal(response)
 	if err != nil {
-		t.Fatalf("Failed to marshal SessionResponse: %v", err)
+		t.Fatalf("Failed to marshal SessionEndpointResponse: %v", err)
 	}
 
-	var unmarshaled SessionResponse
+	var unmarshaled SessionEndpointResponse
 	err = json.Unmarshal(data, &unmarshaled)
 	if err != nil {
-		t.Fatalf("Failed to unmarshal SessionResponse: %v", err)
+		t.Fatalf("Failed to unmarshal SessionEndpointResponse: %v", err)
 	}
 
-	if unmarshaled.UserID != response.UserID {
-		t.Errorf("Expected UserID %s, got %s", response.UserID, unmarshaled.UserID)
+	if unmarshaled.UserId != response.UserId {
+		t.Errorf("Expected UserId %s, got %s", response.UserId, unmarshaled.UserId)
 	}
-	if unmarshaled.TenantID != response.TenantID {
-		t.Errorf("Expected TenantID %s, got %s", response.TenantID, unmarshaled.TenantID)
+	if unmarshaled.TenantId != response.TenantId {
+		t.Errorf("Expected TenantId %s, got %s", response.TenantId, unmarshaled.TenantId)
 	}
 
 	// Verify metadata structure
@@ -767,7 +771,9 @@ func TestWithCookieOptions(t *testing.T) {
 func BenchmarkSessionHandler(b *testing.B) {
 	sessionManager := newMockSessionManager()
 	session := &Session{
-		UserInfo: UserInfoResponse{Sub: "test-user", TenantID: "test-tenant-id"},
+		UserId:   "test-user",
+		TenantId: "test-tenant-id",
+		UserInfo: UserInfoResponse{Sub: "test-user", TenantId: "test-tenant-id"},
 	}
 	sessionManager.sessions["test-session"] = session
 
@@ -786,17 +792,17 @@ func BenchmarkSessionHandler(b *testing.B) {
 }
 
 func BenchmarkSessionJSONMarshaling(b *testing.B) {
+	now := time.Now()
 	session := &Session{
 		AccessToken:  "test-access-token",
 		RefreshToken: "test-refresh-token",
-		ExpiresAt:    time.Now(),
-		ExpiresIn:    time.Hour,
+		ExpiresAt:    now.UnixMilli(),
 		UserInfo: UserInfoResponse{
 			Sub:      "test-user",
 			Email:    "test@example.com",
 			Name:     "Test User",
-			TenantID: "test-tenant",
-			IDPName:  "test-idp",
+			TenantId: "test-tenant",
+			IdpName:  "test-idp",
 		},
 	}
 
@@ -844,7 +850,7 @@ func TestCallbackContext_Session(t *testing.T) {
 			Sub:      "user-123",
 			Name:     "Alice",
 			Email:    "alice@example.com",
-			TenantID: "tenant-abc",
+			TenantId: "tenant-abc",
 		},
 		TenantName:         "acme",
 		TenantCustomDomain: "custom.acme.com",
@@ -858,13 +864,7 @@ func TestCallbackContext_Session(t *testing.T) {
 	if session.RefreshToken != "refresh-tok" {
 		t.Errorf("Expected RefreshToken %q, got %q", "refresh-tok", session.RefreshToken)
 	}
-	if session.IDToken != "id-tok" {
-		t.Errorf("Expected IDToken %q, got %q", "id-tok", session.IDToken)
-	}
-	if session.ExpiresIn != time.Hour {
-		t.Errorf("Expected ExpiresIn %v, got %v", time.Hour, session.ExpiresIn)
-	}
-	if session.ExpiresAt.IsZero() {
+	if session.ExpiresAt == 0 {
 		t.Error("ExpiresAt should be set")
 	}
 	if session.UserInfo.Sub != "user-123" {
@@ -1031,5 +1031,103 @@ func TestLoginState_CreatedAt(t *testing.T) {
 
 	if parsedTimestamp != state.CreatedAt {
 		t.Errorf("Expected timestamp %d in cookie name, got %d", state.CreatedAt, parsedTimestamp)
+	}
+}
+
+func TestWristbandApp_TokenHandler_Success(t *testing.T) {
+	sessionManager := newMockSessionManager()
+	now := time.Now()
+	session := &Session{
+		AccessToken: "test-access-token",
+		ExpiresAt:   now.UnixMilli(),
+	}
+	sessionManager.sessions["test-session"] = session
+
+	app := WristbandApp{
+		SessionManager: sessionManager,
+	}
+
+	req := httptest.NewRequest("GET", "http://example.com/token", nil)
+	res := httptest.NewRecorder()
+
+	handler := app.TokenHandler()
+	handler(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Errorf("Expected status %d, got %d", http.StatusOK, res.Code)
+	}
+	if res.Header().Get("Content-Type") != "application/json" {
+		t.Error("Content-Type should be application/json")
+	}
+	if res.Header().Get("Cache-Control") != "no-cache, no-store" {
+		t.Error("Cache-Control header not set correctly")
+	}
+
+	var response TokenEndpointResponse
+	err := json.Unmarshal(res.Body.Bytes(), &response)
+	if err != nil {
+		t.Fatalf("Failed to unmarshal response: %v", err)
+	}
+	if response.AccessToken != session.AccessToken {
+		t.Errorf("Expected AccessToken %s, got %s", session.AccessToken, response.AccessToken)
+	}
+	if response.ExpiresAt != session.ExpiresAt {
+		t.Errorf(
+			"Expected ExpiresAt %d, got %d",
+			session.ExpiresAt,
+			response.ExpiresAt,
+		)
+	}
+}
+
+func TestWristbandApp_TokenHandler_NoSession(t *testing.T) {
+	sessionManager := newMockSessionManager()
+	sessionManager.getErr = fmt.Errorf("no session")
+
+	app := WristbandApp{
+		SessionManager: sessionManager,
+	}
+
+	req := httptest.NewRequest("GET", "http://example.com/token", nil)
+	res := httptest.NewRecorder()
+
+	handler := app.TokenHandler()
+	handler(res, req)
+
+	if res.Code != http.StatusUnauthorized {
+		t.Errorf("Expected status %d, got %d", http.StatusUnauthorized, res.Code)
+	}
+	if !strings.Contains(res.Body.String(), "Unauthorized access") {
+		t.Error("Response should contain unauthorized message")
+	}
+}
+
+func TestTokenEndpointResponse_JSONMarshaling(t *testing.T) {
+	now := time.Now()
+	response := TokenEndpointResponse{
+		AccessToken: "test-access-token",
+		ExpiresAt:   now.UnixMilli(),
+	}
+
+	data, err := json.Marshal(response)
+	if err != nil {
+		t.Fatalf("Failed to marshal TokenEndpointResponse: %v", err)
+	}
+
+	var unmarshaled TokenEndpointResponse
+	err = json.Unmarshal(data, &unmarshaled)
+	if err != nil {
+		t.Fatalf("Failed to unmarshal TokenEndpointResponse: %v", err)
+	}
+
+	if unmarshaled.AccessToken != response.AccessToken {
+		t.Errorf("Expected AccessToken %s, got %s", response.AccessToken, unmarshaled.AccessToken)
+	}
+	if unmarshaled.ExpiresAt != response.ExpiresAt {
+		t.Errorf(
+			"Expected ExpiresAt %d, got %d",
+			response.ExpiresAt,
+			unmarshaled.ExpiresAt,
+		)
 	}
 }
