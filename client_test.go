@@ -2,6 +2,7 @@ package goauth
 
 import (
 	"encoding/json"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 )
@@ -110,4 +111,56 @@ func TestConfidentialClientWithNilPointer(t *testing.T) {
 
 	req := httptest.NewRequest("POST", "https://example.com/token", nil)
 	client.SetRequestAuth(req)
+}
+
+func TestGetSdkConfiguration_WithRedirectURI(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"loginUrl":                        "https://app.wristband.dev/login",
+			"redirectUri":                     "https://app.example.com/callback",
+			"isApplicationCustomDomainActive": false,
+		})
+	}))
+	defer server.Close()
+
+	client := &ConfidentialClient{
+		ClientID:                         "test-client",
+		WristbandApplicationVanityDomain: server.Listener.Addr().String(),
+		httpClient:                       server.Client(),
+	}
+
+	sdkConfig, err := client.GetSdkConfiguration()
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+	if sdkConfig.RedirectURI != "https://app.example.com/callback" {
+		t.Errorf("Expected RedirectURI %q, got %q", "https://app.example.com/callback", sdkConfig.RedirectURI)
+	}
+}
+
+func TestGetSdkConfiguration_NullRedirectURI(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"loginUrl":                        "https://app.wristband.dev/login",
+			"redirectUri":                     nil,
+			"isApplicationCustomDomainActive": false,
+		})
+	}))
+	defer server.Close()
+
+	client := &ConfidentialClient{
+		ClientID:                         "test-client",
+		WristbandApplicationVanityDomain: server.Listener.Addr().String(),
+		httpClient:                       server.Client(),
+	}
+
+	sdkConfig, err := client.GetSdkConfiguration()
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+	if sdkConfig.RedirectURI != "" {
+		t.Errorf("Expected empty RedirectURI for null, got %q", sdkConfig.RedirectURI)
+	}
 }

@@ -64,8 +64,11 @@ func (c *ConfidentialClient) GetSdkConfiguration() (*SdkConfiguration, error) {
 
 	sdkConfig := &SdkConfiguration{
 		LoginURL:                        response["loginUrl"].(string),
-		RedirectURI:                     response["redirectUri"].(string),
 		IsApplicationCustomDomainActive: response["isApplicationCustomDomainActive"].(bool),
+	}
+
+	if redirectURI, ok := response["redirectUri"].(string); ok {
+		sdkConfig.RedirectURI = redirectURI
 	}
 
 	if customLoginPageURL, ok := response["customApplicationLoginPageUrl"].(string); ok {

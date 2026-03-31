@@ -869,6 +869,50 @@ http.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
 })
 ```
 
+#### Login Hints
+
+Wristband will redirect to your Django Login Endpoint for workflows like Application-Level Login (Tenant Discovery) and can pass the `login_hint` query parameter as part of the redirect request:
+
+```sh
+GET https://customer01.yourapp.ai/auth/login?login_hint=user@wristband.dev
+```
+
+If Wristband passes this parameter, it will be appended as part of the redirect request to the Wristband Authorize Endpoint. Typically, the email form field on the Tenant-Level Login page is pre-filled when a user has previously entered their email on the Application-Level Login Page.
+
+#### IDP Hints
+
+If you want to bypass the Wristband-hosted Tenant Login Page entirely and send users directly to a specific identity provider's login page, you can pass the `idp_hint` query parameter to your Login Endpoint:
+
+```sh
+GET https://customer01.yourapp.io/auth/login?idp_hint=google
+```
+
+The value should be the `name` field of an identity provider that is currently enabled for the tenant. When Wristband receives this hint, it checks if the provided IdP name matches an enabled identity provider for that tenant:
+
+- **Matching external IdP (e.g. `google`)** — Wristband skips the Tenant Login Page entirely and redirects the user straight to that external IdP's login page (e.g. Google's login page).
+- **Wristband IdP name** — Wristband displays the Tenant Login Page but shows only the Wristband email-based login form, hiding any external IdP buttons.
+- **Unrecognized or invalid value** — Wristband ignores the hint and displays the Tenant Login Page as normal.
+
+This is useful when your application already knows which identity provider a user should authenticate with, allowing you to skip the IdP selection step entirely and provide a more seamless login experience.
+
+#### Return URLs
+
+It is possible that users will try to access a location within your application that is not some default landing page. In those cases, they would expect to immediately land back at that desired location after logging in. This is a better experience for the user, especially in cases where they have application URLs bookmarked for convenience.
+
+Given that your frontend will redirect users to your Login Endpoint, you can either include it via `WithReturnURL`:
+```go
+http.HandleFunc("/auth/login", app.LoginHandler(
+    goauth.WithReturnURL("https://customer01.yourapp.io/settings/profile"),
+))
+```
+
+...or you can pass a `return_url` query parameter when redirecting to your Login Endpoint:
+```sh
+GET https://customer01.yourapp.io/auth/login?return_url=https://customer01.yourapp.io/settings/profile
+```
+
+The return URL is stored in the Login State Cookie and available in your Callback Endpoint via `CallbackContext.LoginState.ReturnURL`. You can choose to send users to that return URL after login completes. `WithReturnURL` takes precedence over the query parameter if both are provided.
+
 <br>
 
 ### HandleCallback

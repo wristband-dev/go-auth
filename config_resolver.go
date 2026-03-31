@@ -249,14 +249,6 @@ func containsAny(s string, substrs ...string) (string, bool) {
 }
 
 func (cr *ConfigResolver) validateAllDynamicConfigs(sdkConfig *SdkConfiguration) error {
-	// Validate that required fields are present in the SDK config response
-	if sdkConfig.LoginURL == "" {
-		return fmt.Errorf("SDK configuration response missing required field: login_url")
-	}
-	if sdkConfig.RedirectURI == "" {
-		return fmt.Errorf("SDK configuration response missing required field: redirect_uri")
-	}
-
 	// Use manual config values if provided, otherwise use SDK config values
 	loginURL := ""
 	redirectURI := ""
@@ -270,10 +262,17 @@ func (cr *ConfigResolver) validateAllDynamicConfigs(sdkConfig *SdkConfiguration)
 	if redirectURI == "" {
 		redirectURI = sdkConfig.RedirectURI
 	}
-
 	parseTenantFromRootDomain := cr.ParseTenantFromRootDomain
 	if parseTenantFromRootDomain == "" && sdkConfig.LoginURLTenantDomainSuffix != "" {
 		parseTenantFromRootDomain = sdkConfig.LoginURLTenantDomainSuffix
+	}
+
+	// Validate that required fields are present in the SDK config response
+	if loginURL == "" {
+		return fmt.Errorf("SDK configuration response missing required field: login_url")
+	}
+	if redirectURI == "" {
+		return fmt.Errorf("the [redirect_uri] could not be resolved. Provide it explicitly in your SDK config or ensure your Wristband OAuth2 Client has a single redirect URI configured")
 	}
 
 	// Validate the tenant domain token logic with final resolved values
@@ -426,10 +425,9 @@ func (cr *ConfigResolver) GetParseTenantFromRootDomain() string {
 	return ""
 }
 
-// GetRedirectURI returns the redirect URI.
 func (cr *ConfigResolver) GetRedirectURI() string {
 	// 1. Check if manually provided in authConfig
-	if cr.SdkConfiguration != nil {
+	if cr.SdkConfiguration != nil && cr.RedirectURI != "" {
 		return cr.RedirectURI
 	}
 
