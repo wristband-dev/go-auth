@@ -66,6 +66,9 @@ func (req AuthorizeRequest) AuthorizeURL(httpCtx HTTPContext, baseURL string) st
 	if queryValues != nil && queryValues.Has("login_hint") {
 		params.Set("login_hint", queryValues.Get("login_hint"))
 	}
+	if queryValues != nil && queryValues.Has("idp_hint") {
+		params.Set("idp_hint", queryValues.Get("idp_hint"))
+	}
 	if req.CodeVerifier != "" {
 		// Generate code challenge for PKCE
 		params.Set("code_challenge", rand.GenerateCodeChallenge(req.CodeVerifier))

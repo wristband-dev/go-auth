@@ -236,6 +236,8 @@ type SdkConfiguration struct {
 	// LoginURL is the URL for initiating the login request
 	LoginURL string `json:"login_url"`
 
+	// CONDITIONAL - null if 2+ redirect URIs are configured for the OAuth2 Client in Wristband.
+
 	// RedirectURI is the redirect URI for callback after authentication
 	RedirectURI string `json:"redirect_uri"`
 

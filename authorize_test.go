@@ -223,6 +223,50 @@ func TestAuthorizeURL_WithLoginHint(t *testing.T) {
 	}
 }
 
+func TestAuthorizeURL_WithIdpHint(t *testing.T) {
+	authReq := AuthorizeRequest{
+		State:       "state-123",
+		RedirectURI: "https://app.example.com/callback",
+		Scopes:      []string{"openid"},
+		Client:      ConfidentialClient{ClientID: "my-client"},
+	}
+
+	mockCtx := newMockHTTPContext()
+	mockCtx.queryValues.Set("idp_hint", "google")
+
+	authorizeURL := authReq.AuthorizeURL(mockCtx, "tenant1-app.wristband.dev")
+
+	parsedURL, err := url.Parse(authorizeURL)
+	if err != nil {
+		t.Fatalf("Failed to parse authorize URL: %v", err)
+	}
+
+	if parsedURL.Query().Get("idp_hint") != "google" {
+		t.Errorf("Expected idp_hint google, got %s", parsedURL.Query().Get("idp_hint"))
+	}
+}
+
+func TestAuthorizeURL_WithoutIdpHint(t *testing.T) {
+	authReq := AuthorizeRequest{
+		State:       "state-123",
+		RedirectURI: "https://app.example.com/callback",
+		Scopes:      []string{"openid"},
+		Client:      ConfidentialClient{ClientID: "my-client"},
+	}
+
+	mockCtx := newMockHTTPContext()
+	authorizeURL := authReq.AuthorizeURL(mockCtx, "tenant1-app.wristband.dev")
+
+	parsedURL, err := url.Parse(authorizeURL)
+	if err != nil {
+		t.Fatalf("Failed to parse authorize URL: %v", err)
+	}
+
+	if parsedURL.Query().Get("idp_hint") != "" {
+		t.Error("idp_hint should not be present when not provided")
+	}
+}
+
 func TestAuthorizeURL_WithoutCodeVerifier(t *testing.T) {
 	authReq := AuthorizeRequest{
 		State:       "state-123",
