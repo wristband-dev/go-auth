@@ -756,6 +756,11 @@ Wristband supports multiple tenant domain configurations, including tenant subdo
 
 If none of these are specified, `Login()` returns the Application-Level Login (Tenant Discovery) URL (or your configured `CustomApplicationLoginPageURL`), which your login handler should redirect the user to.
 
+> [!NOTE]
+> The `tenant_custom_domain` query parameter (#1) is validated against the Wristband tenant custom domain
+> validation API. If the value is not a valid tenant custom domain for your application, it is ignored and
+> skipped over during evaluation, and the SDK continues on to the next entry in the precedence order above.
+
 #### Tenant Name Query Param
 
 If your application does not wish to utilize tenant subdomains, you can pass the `tenant_name` query parameter to your Login Endpoint and the SDK will use it when generating the Wristband Authorize URL.
@@ -1001,6 +1006,23 @@ The `LogoutConfig` can be configured using `NewLogoutConfig` and providing any d
 | `WithRedirectURL(url string)`           | Sets the URL to redirect to after logout. |
 | `WithTenantDomain(domain string)`       | Sets the tenant domain for logout.        |
 | `WithTenantCustomDomain(domain string)` | Sets the tenant custom domain for logout. |
+
+#### Which Domains Are Used in the Logout URL?
+
+When the Go SDK constructs the Wristband Logout URL during `LogoutURL()`, it resolves the tenant domain using the following precedence order:
+
+1. `WithTenantCustomDomain(domain string)` logout option: If provided, this takes top priority.
+2. `WithTenantName(name string)` logout option: This takes the next priority if a tenant custom domain is not present.
+3. `tenant_custom_domain` query parameter: Evaluated if present and no logout option was provided for either the tenant custom domain or the tenant name.
+4. Tenant subdomain in the request host: Used if none of the above are present and `AuthConfig.ParseTenantFromRootDomain` is configured.
+5. `tenant_name` query parameter: Used as the final fallback.
+
+If none of these are specified, `LogoutURL()` returns your configured redirect URL, or otherwise the Application-Level Login (Tenant Discovery) URL.
+
+> [!NOTE]
+> The `tenant_custom_domain` query parameter (#3) is validated against the Wristband tenant custom domain
+> validation API. If the value is not a valid tenant custom domain for your application, it is ignored and
+> skipped over during evaluation, and the SDK continues on to the next entry in the precedence order above.
 
 **Example**
 

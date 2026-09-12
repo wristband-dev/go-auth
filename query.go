@@ -38,18 +38,22 @@ type CallbackInputParams struct {
 	TenantCustomDomain string `json:"tenant_custom_domain"`
 }
 
-func (auth WristbandAuth) getCallbackInputs(httpCtx HTTPContext) CallbackInputParams {
+func (auth WristbandAuth) getCallbackInputs(httpCtx HTTPContext) (CallbackInputParams, error) {
 	queryValues := httpCtx.Query()
 
 	params := CallbackInputParams{
 		Code:  queryValues.Get("code"),
 		State: queryValues.Get("state"),
 	}
-	if customTenantName, ok := auth.RequestCustomTenantName(httpCtx); ok {
-		params.TenantCustomDomain = customTenantName
+	// An invalid tenant custom domain is skipped over rather than failing the callback.
+	customTenantName, err := auth.requestValidCustomTenantName(httpCtx)
+	if err != nil {
+		return params, err
 	}
+	params.TenantCustomDomain = customTenantName
+
 	if tenantName, err := auth.RequestTenantName(httpCtx); err == nil {
 		params.TenantName = tenantName
 	}
-	return params
+	return params, nil
 }

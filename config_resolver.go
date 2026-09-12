@@ -153,29 +153,22 @@ func (cr *ConfigResolver) loadSdkConfig() (*SdkConfiguration, error) {
 	}
 }
 
+// fetchSdkConfiguration fetches and validates the SDK configuration.
+//
+// Retrying transient failures (5xx responses and network errors) is handled one layer down by
+// ConfidentialClient.GetSdkConfiguration -- see withRetry in retry.go. By the time an error
+// surfaces here, any applicable retries have already been exhausted.
 func (cr *ConfigResolver) fetchSdkConfiguration() (*SdkConfiguration, error) {
-	var lastError error
-
-	for attempt := 1; attempt <= MaxFetchAttempts; attempt++ {
-		sdkConfig, err := cr.wristbandAPI.GetSdkConfiguration()
-		if err == nil {
-			if err := cr.validateAllDynamicConfigs(sdkConfig); err != nil {
-				return nil, fmt.Errorf("SDK configuration validation failed: %w", err)
-			}
-			return sdkConfig, nil
-		}
-
-		lastError = err
-
-		if attempt == MaxFetchAttempts {
-			break
-		}
-
-		// Wait before retrying
-		time.Sleep(time.Duration(AttemptDelayMs) * time.Millisecond)
+	sdkConfig, err := cr.wristbandAPI.GetSdkConfiguration()
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch SDK configuration: %w", err)
 	}
 
-	return nil, fmt.Errorf("failed to fetch SDK configuration after %d attempts: %w", MaxFetchAttempts, lastError)
+	if err := cr.validateAllDynamicConfigs(sdkConfig); err != nil {
+		return nil, fmt.Errorf("SDK configuration validation failed: %w", err)
+	}
+
+	return sdkConfig, nil
 }
 
 func (cr *ConfigResolver) validateRequiredAuthConfigs() error {

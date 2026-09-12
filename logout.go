@@ -121,7 +121,13 @@ func (auth WristbandAuth) logoutHost(req RequestURI, options LogoutConfig) (stri
 	if options.tenantName != "" {
 		return strings.Join([]string{options.tenantName, auth.configResolver.WristbandApplicationVanityDomain}, auth.separator()), nil
 	}
-	if customTenantName, ok := auth.RequestCustomTenantName(req); ok {
+	// An invalid tenant custom domain is skipped over rather than failing the logout, so
+	// resolution falls through to the next domain in the precedence order below.
+	customTenantName, err := auth.requestValidCustomTenantName(req)
+	if err != nil {
+		return "", err
+	}
+	if customTenantName != "" {
 		return customTenantName, nil
 	}
 	if tenantName, err := auth.RequestTenantName(req); err == nil && tenantName != "" {

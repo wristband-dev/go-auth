@@ -1,15 +1,24 @@
 package goauth
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"strings"
 )
 
-// MaxFetchAttempts is the maximum number of attempts to fetch SDK configuration
+// MaxFetchAttempts is the maximum number of attempts to fetch SDK configuration.
+//
+// Deprecated: retries are now applied to every Wristband API call rather than only to the
+// SDK configuration fetch. Use MaxAPIRetryAttempts instead.
 const MaxFetchAttempts = 3
 
-// AttemptDelayMs is the delay between retry attempts in milliseconds
+// AttemptDelayMs is the delay between retry attempts in milliseconds.
+//
+// Deprecated: retries are now applied to every Wristband API call and use exponential
+// backoff. Use APIRetryDelayMs and APIRetryDelayMultiplier instead.
 const AttemptDelayMs = 100
 
 // NewConfidentialClient creates a new ConfidentialClient with the provided client ID and secret.
@@ -35,49 +44,125 @@ func (c *ConfidentialClient) SetRequestAuth(httpReq *http.Request) {
 	httpReq.SetBasicAuth(c.ClientID, c.ClientSecret)
 }
 
-// GetSdkConfiguration fetches the SDK configuration from Wristband's auto-configuration endpoint
+// GetSdkConfiguration fetches the SDK configuration from Wristband's auto-configuration endpoint.
+//
+// Transient failures (5xx responses and network errors) are retried automatically with
+// exponential backoff. See withRetry.
 func (c *ConfidentialClient) GetSdkConfiguration() (*SdkConfiguration, error) {
 	endpoint := fmt.Sprintf("https://%s/api/v1/clients/%s/sdk-configuration", c.WristbandApplicationVanityDomain, c.ClientID)
 
-	req, err := http.NewRequest("GET", endpoint, nil)
+	return withRetry(func() (*SdkConfiguration, error) {
+		req, err := http.NewRequest(http.MethodGet, endpoint, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create request: %w", err)
+		}
+
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json;charset=UTF-8")
+
+		resp, err := c.httpClient.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("failed to make request: %w", err)
+		}
+		defer resp.Body.Close()
+
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read response: %w", err)
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			return nil, &APIError{
+				Operation:  "SDK configuration request",
+				StatusCode: resp.StatusCode,
+				Body:       string(body),
+			}
+		}
+
+		var response map[string]any
+		if err := json.Unmarshal(body, &response); err != nil {
+			return nil, fmt.Errorf("failed to decode response: %w", err)
+		}
+
+		sdkConfig := &SdkConfiguration{
+			LoginURL:                        response["loginUrl"].(string),
+			IsApplicationCustomDomainActive: response["isApplicationCustomDomainActive"].(bool),
+		}
+
+		if redirectURI, ok := response["redirectUri"].(string); ok {
+			sdkConfig.RedirectURI = redirectURI
+		}
+
+		if customLoginPageURL, ok := response["customApplicationLoginPageUrl"].(string); ok {
+			sdkConfig.CustomApplicationLoginPageURL = customLoginPageURL
+		}
+
+		if tenantDomainSuffix, ok := response["loginUrlTenantDomainSuffix"].(string); ok {
+			sdkConfig.LoginURLTenantDomainSuffix = tenantDomainSuffix
+		}
+
+		return sdkConfig, nil
+	})
+}
+
+// validateTenantCustomDomainResponse is the response body of the tenant custom domain
+// validation endpoint.
+type validateTenantCustomDomainResponse struct {
+	Valid bool `json:"valid"`
+}
+
+// ValidateTenantCustomDomain reports whether the given tenant custom domain is verified and
+// belongs to your Wristband application.
+//
+// This is used to confirm that a tenant custom domain supplied via query parameter is
+// legitimate before the SDK redirects to it, which prevents external users from manipulating
+// where the SDK sends them. Transient failures (5xx responses and network errors) are retried
+// automatically with exponential backoff. See withRetry.
+func (c *ConfidentialClient) ValidateTenantCustomDomain(tenantCustomDomain string) (bool, error) {
+	if strings.TrimSpace(tenantCustomDomain) == "" {
+		return false, fmt.Errorf("tenant custom domain is required")
+	}
+
+	endpoint := fmt.Sprintf("https://%s/api/v1/custom-domains/validate", c.WristbandApplicationVanityDomain)
+
+	payload, err := json.Marshal(map[string]string{"tenantCustomDomain": tenantCustomDomain})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return false, fmt.Errorf("failed to encode request: %w", err)
 	}
 
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json;charset=UTF-8")
+	return withRetry(func() (bool, error) {
+		req, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(payload))
+		if err != nil {
+			return false, fmt.Errorf("failed to create request: %w", err)
+		}
 
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to make request: %w", err)
-	}
-	defer resp.Body.Close()
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json")
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("API request failed with status %d", resp.StatusCode)
-	}
+		resp, err := c.httpClient.Do(req)
+		if err != nil {
+			return false, fmt.Errorf("failed to make request: %w", err)
+		}
+		defer resp.Body.Close()
 
-	var response map[string]any
-	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %w", err)
-	}
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return false, fmt.Errorf("failed to read response: %w", err)
+		}
 
-	sdkConfig := &SdkConfiguration{
-		LoginURL:                        response["loginUrl"].(string),
-		IsApplicationCustomDomainActive: response["isApplicationCustomDomainActive"].(bool),
-	}
+		if resp.StatusCode != http.StatusOK {
+			return false, &APIError{
+				Operation:  "tenant custom domain validation request",
+				StatusCode: resp.StatusCode,
+				Body:       string(body),
+			}
+		}
 
-	if redirectURI, ok := response["redirectUri"].(string); ok {
-		sdkConfig.RedirectURI = redirectURI
-	}
+		var response validateTenantCustomDomainResponse
+		if err := json.Unmarshal(body, &response); err != nil {
+			return false, fmt.Errorf("failed to decode response: %w", err)
+		}
 
-	if customLoginPageURL, ok := response["customApplicationLoginPageUrl"].(string); ok {
-		sdkConfig.CustomApplicationLoginPageURL = customLoginPageURL
-	}
-
-	if tenantDomainSuffix, ok := response["loginUrlTenantDomainSuffix"].(string); ok {
-		sdkConfig.LoginURLTenantDomainSuffix = tenantDomainSuffix
-	}
-
-	return sdkConfig, nil
+		return response.Valid, nil
+	})
 }
