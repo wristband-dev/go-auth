@@ -50,6 +50,16 @@ func (app WristbandApp) RequireAuthentication(next http.Handler) http.Handler {
 		bufferDuration := time.Duration(app.configResolver.GetTokenExpirationBuffer()) * time.Second
 		if time.Now().Add(bufferDuration).UnixMilli() < session.ExpiresAt {
 			req = req.WithContext(WithSessionContext(req.Context(), session))
+
+			// Re-store the session on every authenticated request so that its cookie is
+			// re-issued with a fresh expiration (rolling session expiration). Without this,
+			// the session cookie's timestamp never moves forward while the user is active
+			// and the session expires mid-use.
+			if err := app.SessionManager.StoreSession(res, req, session); err != nil {
+				http.Error(res, "Failed to update session", http.StatusInternalServerError)
+				return
+			}
+
 			// Token is still valid, continue to next handler
 			next.ServeHTTP(res, req)
 			return

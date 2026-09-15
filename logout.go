@@ -94,18 +94,25 @@ func (auth WristbandAuth) LogoutURL(req RequestURI, config LogoutConfig) (string
 
 	host, err := auth.logoutHost(req, config)
 	if err != nil {
-		if errors.Is(err, ErrTenantNameNotFound) {
-			if config.redirectURL != "" {
-				return config.redirectURL, nil
-			}
-			if customLogin, err := auth.configResolver.GetCustomApplicationLoginPageURL(); err == nil {
-				if customLogin != "" {
-					return customLogin, nil
-				}
-				return fmt.Sprintf("https://%s/login?client_id=%s", auth.configResolver.WristbandApplicationVanityDomain, auth.Client.ClientID), nil
-			}
+		if !errors.Is(err, ErrTenantNameNotFound) {
+			// Any other failure (for example the tenant custom domain validation call failing)
+			// must be surfaced. Falling through here would build a logout URL with an empty
+			// host, which browsers resolve relative to the current origin and which therefore
+			// 404s against the application instead of reaching Wristband.
 			return "", err
 		}
+
+		if config.redirectURL != "" {
+			return config.redirectURL, nil
+		}
+		customLogin, customLoginErr := auth.configResolver.GetCustomApplicationLoginPageURL()
+		if customLoginErr != nil {
+			return "", customLoginErr
+		}
+		if customLogin != "" {
+			return customLogin, nil
+		}
+		return fmt.Sprintf("https://%s/login?client_id=%s", auth.configResolver.WristbandApplicationVanityDomain, auth.Client.ClientID), nil
 	}
 
 	return fmt.Sprintf("https://%s/api/v1/logout?%s", host, params.Encode()), nil
