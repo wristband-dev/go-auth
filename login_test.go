@@ -81,6 +81,11 @@ func TestLoginBaseURL_FromTenantCustomDomain(t *testing.T) {
 	}
 	auth, _ := authConfig.WristbandAuth()
 
+	// The tenant_custom_domain query param is now validated against Wristband before it is
+	// used, so stub that call out rather than reaching the network.
+	stub, _ := stubHTTPClient(stubResponse{statusCode: 200, body: `{"valid":true}`})
+	auth.Client.httpClient = stub
+
 	got, err := auth.loginBaseURL(ctx, nil)
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)

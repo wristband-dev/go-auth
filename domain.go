@@ -216,6 +216,39 @@ func (auth WristbandAuth) RequestCustomTenantName(req RequestURI) (string, bool)
 	return req.Query().Get("tenant_custom_domain"), req.Query().Has("tenant_custom_domain")
 }
 
+// resolveValidTenantCustomDomain resolves a tenant custom domain to itself when it is verified
+// and belongs to your Wristband application. It resolves to an empty string otherwise, so the
+// caller skips over it and falls through to the next domain in its resolution precedence order.
+//
+// Validation only applies to domains supplied via the tenant_custom_domain query parameter,
+// which is attacker-controllable. Domains set directly in configuration by the developer are
+// trusted and are not validated.
+func (auth WristbandAuth) resolveValidTenantCustomDomain(tenantCustomDomain string) (string, error) {
+	if tenantCustomDomain == "" {
+		return "", nil
+	}
+
+	isValid, err := auth.Client.ValidateTenantCustomDomain(tenantCustomDomain)
+	if err != nil {
+		return "", err
+	}
+	if !isValid {
+		return "", nil
+	}
+
+	return tenantCustomDomain, nil
+}
+
+// requestValidCustomTenantName returns the tenant custom domain from the request's
+// tenant_custom_domain query parameter, but only if it passes validation against Wristband.
+func (auth WristbandAuth) requestValidCustomTenantName(req RequestURI) (string, error) {
+	tenantCustomDomain, ok := auth.RequestCustomTenantName(req)
+	if !ok {
+		return "", nil
+	}
+	return auth.resolveValidTenantCustomDomain(tenantCustomDomain)
+}
+
 func (auth WristbandAuth) separator() string {
 	if auth.configResolver.GetIsApplicationCustomDomainActive() {
 		return "."

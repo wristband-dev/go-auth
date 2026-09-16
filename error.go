@@ -12,6 +12,35 @@ func (e InvalidParameterError) Error() string {
 	return "query parameter " + string(e) + " is invalid"
 }
 
+// APIError represents a non-2xx response received from a Wristband API call.
+//
+// The raw response body is preserved as an unparsed string so that a non-JSON error body
+// (for example a plain-text or HTML error page served by a proxy or CDN) never causes a
+// decoding failure of its own. Retry classification relies on StatusCode, so a 4xx carrying
+// a non-JSON body is still correctly treated as non-retryable.
+type APIError struct {
+	// Operation describes the API call that failed, used to prefix the error message.
+	Operation string
+	// Body is the raw, unparsed response body.
+	Body string
+	// StatusCode is the HTTP status code returned by the Wristband API.
+	StatusCode int
+}
+
+// Error implements the error interface.
+func (e *APIError) Error() string {
+	return fmt.Sprintf("%s failed with status %d: %s", e.Operation, e.StatusCode, e.Body)
+}
+
+// IsAPIError checks if the error is an APIError.
+func IsAPIError(err error) (*APIError, bool) {
+	var apiError *APIError
+	if errors.As(err, &apiError) {
+		return apiError, true
+	}
+	return nil, false
+}
+
 // WristbandError represents an error returned by the Wristband API.
 type WristbandError struct {
 	Message string

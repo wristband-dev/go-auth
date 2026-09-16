@@ -177,6 +177,9 @@ func (req TokenRequest) newHTTPRequest() (*http.Request, error) {
 }
 
 // Do sends the TokenRequest and returns the TokenResponse.
+//
+// Transient failures (5xx responses and network errors) are retried automatically with
+// exponential backoff. See withRetry.
 func (req TokenRequest) Do(httpClient *http.Client) (TokenResponse, error) {
 	// Validate the request before sending
 	if err := req.Validate(); err != nil {
@@ -188,37 +191,43 @@ func (req TokenRequest) Do(httpClient *http.Client) (TokenResponse, error) {
 		httpClient = req.Client.httpClient
 	}
 
-	// Create the HTTP request
-	httpReq, err := req.newHTTPRequest()
-	if err != nil {
-		return TokenResponse{}, err
-	}
+	return withRetry(func() (TokenResponse, error) {
+		// Create the HTTP request
+		httpReq, err := req.newHTTPRequest()
+		if err != nil {
+			return TokenResponse{}, err
+		}
 
-	// Send the request
-	resp, err := httpClient.Do(httpReq)
-	if err != nil {
-		return TokenResponse{}, err
-	}
-	defer resp.Body.Close()
+		// Send the request
+		resp, err := httpClient.Do(httpReq)
+		if err != nil {
+			return TokenResponse{}, err
+		}
+		defer resp.Body.Close()
 
-	// Read the response body
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return TokenResponse{}, err
-	}
+		// Read the response body
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return TokenResponse{}, err
+		}
 
-	// Check for successful response
-	if resp.StatusCode != http.StatusOK {
-		return TokenResponse{}, fmt.Errorf("token request failed with status %d: %s", resp.StatusCode, body)
-	}
+		// Check for successful response
+		if resp.StatusCode != http.StatusOK {
+			return TokenResponse{}, &APIError{
+				Operation:  "token request",
+				StatusCode: resp.StatusCode,
+				Body:       string(body),
+			}
+		}
 
-	// Parse the token response
-	var tokenResponse TokenResponse
-	if err := json.Unmarshal(body, &tokenResponse); err != nil {
-		return TokenResponse{}, err
-	}
+		// Parse the token response
+		var tokenResponse TokenResponse
+		if err := json.Unmarshal(body, &tokenResponse); err != nil {
+			return TokenResponse{}, err
+		}
 
-	return tokenResponse, nil
+		return tokenResponse, nil
+	})
 }
 
 // RefreshAccessToken refreshes an access token using a refresh token.
@@ -236,7 +245,10 @@ const (
 	RefreshTokenType = "refresh_token"
 )
 
-// RevokeToken revokes a token (access or refresh)
+// RevokeToken revokes a token (access or refresh).
+//
+// Transient failures (5xx responses and network errors) are retried automatically with
+// exponential backoff. See withRetry.
 func (auth WristbandAuth) RevokeToken(token, tokenType string) error {
 	revokeEndpoint := fmt.Sprintf("https://%s", auth.RevokeEndpoint())
 
@@ -244,23 +256,31 @@ func (auth WristbandAuth) RevokeToken(token, tokenType string) error {
 	data.Set("token", token)
 	data.Set("token_type_hint", tokenType)
 
-	req, err := http.NewRequest(http.MethodPost, revokeEndpoint, strings.NewReader(data.Encode()))
-	if err != nil {
-		return err
-	}
-	auth.Client.SetRequestAuth(req)
-	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+	_, err := withRetry(func() (struct{}, error) {
+		req, err := http.NewRequest(http.MethodPost, revokeEndpoint, strings.NewReader(data.Encode()))
+		if err != nil {
+			return struct{}{}, err
+		}
+		auth.Client.SetRequestAuth(req)
+		req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 
-	resp, err := auth.httpClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
+		resp, err := auth.httpClient.Do(req)
+		if err != nil {
+			return struct{}{}, err
+		}
+		defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("token revocation failed with status %d: %s", resp.StatusCode, body)
-	}
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			return struct{}{}, &APIError{
+				Operation:  "token revocation",
+				StatusCode: resp.StatusCode,
+				Body:       string(body),
+			}
+		}
 
-	return nil
+		return struct{}{}, nil
+	})
+
+	return err
 }

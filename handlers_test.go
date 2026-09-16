@@ -16,10 +16,11 @@ import (
 // Mock implementations for testing
 
 type mockSessionManager struct {
-	sessions map[string]*Session
-	storeErr error
-	getErr   error
-	clearErr error
+	sessions   map[string]*Session
+	storeErr   error
+	getErr     error
+	clearErr   error
+	storeCalls int
 }
 
 func newMockSessionManager() *mockSessionManager {
@@ -29,6 +30,7 @@ func newMockSessionManager() *mockSessionManager {
 }
 
 func (m *mockSessionManager) StoreSession(_ http.ResponseWriter, _ *http.Request, session *Session) error {
+	m.storeCalls++
 	if m.storeErr != nil {
 		return m.storeErr
 	}

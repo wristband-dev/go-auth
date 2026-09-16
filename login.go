@@ -157,8 +157,14 @@ func (options *LoginOptions) resolveReturnURL(req HTTPContext) string {
 }
 
 func (auth WristbandAuth) loginBaseURL(req HTTPContext, options *LoginOptions) (string, error) {
-	if TenantCustomDomain, ok := auth.RequestCustomTenantName(req); ok {
-		return TenantCustomDomain, nil
+	// An invalid tenant custom domain is skipped over rather than failing the login, so
+	// resolution falls through to the next domain in the precedence order below.
+	tenantCustomDomain, err := auth.requestValidCustomTenantName(req)
+	if err != nil {
+		return "", err
+	}
+	if tenantCustomDomain != "" {
+		return tenantCustomDomain, nil
 	}
 	if tenantName, err := auth.RequestTenantName(req); err == nil && tenantName != "" {
 		return strings.Join([]string{tenantName, auth.configResolver.WristbandApplicationVanityDomain}, auth.separator()), nil
@@ -264,7 +270,10 @@ func (auth WristbandAuth) HandleCallback(httpCtx HTTPContext) (*CallbackContext,
 	if err := RequestError(httpCtx.Query()); err != nil {
 		return nil, err
 	}
-	inputs := auth.getCallbackInputs(httpCtx)
+	inputs, err := auth.getCallbackInputs(httpCtx)
+	if err != nil {
+		return nil, err
+	}
 	if inputs.Code == "" {
 		return nil, InvalidParameterError("code")
 	}
