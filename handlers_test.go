@@ -282,8 +282,9 @@ func TestWristbandApp_LoginHandler_WithoutTenantDomain(t *testing.T) {
 		AutoConfigureEnabled:             false,
 		Scopes:                           []string{"openid"},
 		SdkConfiguration: &SdkConfiguration{
-			LoginURL:    "https://test.wristband.com/login",
-			RedirectURI: "http://example.com/callback",
+			ApplicationAuthorizationRequestsEnabled: boolPtr(false),
+			LoginURL:                                "https://test.wristband.com/login",
+			RedirectURI:                             "http://example.com/callback",
 		},
 	}
 	auth, _ := authConfig.WristbandAuth()
@@ -328,9 +329,10 @@ func TestWristbandApp_LoginHandler_WithCustomLoginPage(t *testing.T) {
 		AutoConfigureEnabled:             false,
 		Scopes:                           []string{"openid"},
 		SdkConfiguration: &SdkConfiguration{
-			LoginURL:                      "https://test.wristband.com/login",
-			RedirectURI:                   "http://example.com/callback",
-			CustomApplicationLoginPageURL: "https://custom.example.com/login",
+			ApplicationAuthorizationRequestsEnabled: boolPtr(false),
+			LoginURL:                                "https://test.wristband.com/login",
+			RedirectURI:                             "http://example.com/callback",
+			CustomApplicationLoginPageURL:           "https://custom.example.com/login",
 		},
 	}
 	auth, _ := authConfig.WristbandAuth()
@@ -950,7 +952,7 @@ func TestWristbandAuth_CleanupOldLoginCookies(t *testing.T) {
 	mockCookieReq.cookies["other-cookie"] = "other-value"
 
 	// Call cleanup
-	auth.cleanupOldLoginCookies(mockCtx)
+	auth.cleanupOldLoginCookies(mockCtx, "")
 
 	// Should keep only the 2 most recent cookies (state4 and state5)
 	// and clear the 3 oldest (state1, state2, state3)
@@ -1132,4 +1134,8 @@ func TestTokenEndpointResponse_JSONMarshaling(t *testing.T) {
 			unmarshaled.ExpiresAt,
 		)
 	}
+}
+
+func boolPtr(b bool) *bool {
+	return &b
 }

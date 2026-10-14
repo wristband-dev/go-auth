@@ -8,20 +8,12 @@ import (
 )
 
 const (
-	// TenantDomainToken is the (deprecated) token used to represent tenant domains in URLs00
-	TenantDomainToken = "{tenant_domain}"
-	// TenantNameToken is the token used to represent tenant domains in URLs
+	// TenantNameToken is the token used to represent tenant subdomains in URLs
 	TenantNameToken = "{tenant_name}"
 
-	// TenantPlaceholderMessage is a string describing the placeholders.
-	TenantPlaceholderMessage = `"{tenant_name}" or "{tenant_domain}" placeholder`
+	// TenantPlaceholderMessage is a string describing the placeholder.
+	TenantPlaceholderMessage = `"{tenant_name}" placeholder`
 )
-
-// TenantPlaceholders is the list of possible tokens that can be used as placeholders.
-var TenantPlaceholders = []string{
-	TenantDomainToken,
-	TenantNameToken,
-}
 
 // ConfigResolver resolves and validates Wristband authentication configuration,
 // supporting both manual configuration and auto-configuration via the Wristband SDK configuration endpoint
@@ -200,64 +192,80 @@ func (cr *ConfigResolver) validateStrictURLAuthConfigs() error {
 	if cr.RedirectURI == "" {
 		return fmt.Errorf("the [redirect_uri] config must have a value when auto-configure is disabled")
 	}
-
-	return cr.validateTenantDomainTokens()
+	if err := validateTenantPlaceholderPosition("login_url", cr.LoginURL); err != nil {
+		return err
+	}
+	if err := validateTenantPlaceholderPosition("redirect_uri", cr.RedirectURI); err != nil {
+		return err
+	}
+	return validateMatchingTenantPlaceholders(cr.LoginURL, cr.RedirectURI, "")
 }
 
+// validatePartialURLAuthConfigs validates the manually provided URL configs when auto-configure is enabled.
+// When only one of the two URLs is provided, the placeholder comparison happens in validateAllDynamicConfigs
+// instead, once the other URL is available from the SDK Auto-Configuration Endpoint.
 func (cr *ConfigResolver) validatePartialURLAuthConfigs() error {
-	return cr.validateTenantDomainTokens()
-}
-
-func (cr *ConfigResolver) validateTenantDomainTokens() error {
-	if cr.GetParseTenantFromRootDomain() != "" {
-		if _, ok := containsTenantPlaceholder(cr.LoginURL); !ok {
-			return fmt.Errorf("the [login_url] must contain the %s when using the [parse_tenant_from_root_domain] config", TenantPlaceholderMessage)
+	if cr.SdkConfiguration == nil {
+		return nil
+	}
+	if cr.LoginURL != "" {
+		if err := validateTenantPlaceholderPosition("login_url", cr.LoginURL); err != nil {
+			return err
 		}
-		// TODO Finish
-		if _, ok := containsTenantPlaceholder(cr.RedirectURI); !ok {
-			return fmt.Errorf("the [redirect_uri] must contain the %s when using the [parse_tenant_from_root_domain] config", TenantPlaceholderMessage)
+	}
+	if cr.RedirectURI != "" {
+		if err := validateTenantPlaceholderPosition("redirect_uri", cr.RedirectURI); err != nil {
+			return err
 		}
-	} else if cr.SdkConfiguration != nil {
-		if _, ok := containsTenantPlaceholder(cr.LoginURL); ok {
-			return fmt.Errorf("the [login_url] cannot contain the %s when the [parse_tenant_from_root_domain] is absent", TenantPlaceholderMessage)
-		}
-		if _, ok := containsTenantPlaceholder(cr.RedirectURI); ok {
-			return fmt.Errorf("the [redirect_uri] cannot contain the %s when the [parse_tenant_from_root_domain] is absent", TenantPlaceholderMessage)
-		}
+	}
+	if cr.LoginURL != "" && cr.RedirectURI != "" {
+		return validateMatchingTenantPlaceholders(cr.LoginURL, cr.RedirectURI, "")
 	}
 	return nil
 }
 
-func containsTenantPlaceholder(value string) (string, bool) {
-	return containsAny(value, TenantPlaceholders...)
-}
-
-func containsAny(s string, substrs ...string) (string, bool) {
-	for _, substr := range substrs {
-		if strings.Contains(s, substr) {
-			return s, true
-		}
+// validateTenantPlaceholderPosition checks that a URL only contains the {tenant_name} placeholder once, as the
+// leftmost part of its hostname.
+func validateTenantPlaceholderPosition(configName, rawURL string) error {
+	if !isTenantPlaceholderPositionValid(rawURL) {
+		return fmt.Errorf("the [%s] can only contain the %s once, as the leftmost part of its hostname", configName, TenantPlaceholderMessage)
 	}
-	return "", false
+	return nil
 }
 
+// validateMatchingTenantPlaceholders checks that either both URLs contain the {tenant_name} placeholder or
+// neither does. The qualifier (e.g. "resolved ") is added to the config names in the error message.
+func validateMatchingTenantPlaceholders(loginURL, redirectURI, qualifier string) error {
+	loginURLHasPlaceholder := strings.Contains(loginURL, TenantNameToken)
+	redirectURIHasPlaceholder := strings.Contains(redirectURI, TenantNameToken)
+	if loginURLHasPlaceholder && !redirectURIHasPlaceholder {
+		return fmt.Errorf("the %s[redirect_uri] must contain the %s when the %s[login_url] contains it", qualifier, TenantPlaceholderMessage, qualifier)
+	}
+	if !loginURLHasPlaceholder && redirectURIHasPlaceholder {
+		return fmt.Errorf("the %s[redirect_uri] cannot contain the %s when the %s[login_url] does not contain it", qualifier, TenantPlaceholderMessage, qualifier)
+	}
+	return nil
+}
+
+// validateAllDynamicConfigs validates the final resolved URL configs after the SDK Auto-Configuration Endpoint
+// responds. When at least one of [login_url] and [redirect_uri] was provided manually, either both resolved URLs
+// must contain the {tenant_name} placeholder or neither does. When both URLs come from the SDK Auto-Configuration
+// Endpoint, their placeholders are trusted as-is.
 func (cr *ConfigResolver) validateAllDynamicConfigs(sdkConfig *SdkConfiguration) error {
 	// Use manual config values if provided, otherwise use SDK config values
-	loginURL := ""
-	redirectURI := ""
+	manualLoginURL := ""
+	manualRedirectURI := ""
 	if cr.SdkConfiguration != nil {
-		loginURL = cr.LoginURL
-		redirectURI = cr.RedirectURI
+		manualLoginURL = cr.LoginURL
+		manualRedirectURI = cr.RedirectURI
 	}
+	loginURL := manualLoginURL
 	if loginURL == "" {
 		loginURL = sdkConfig.LoginURL
 	}
+	redirectURI := manualRedirectURI
 	if redirectURI == "" {
 		redirectURI = sdkConfig.RedirectURI
-	}
-	parseTenantFromRootDomain := cr.ParseTenantFromRootDomain
-	if parseTenantFromRootDomain == "" && sdkConfig.LoginURLTenantDomainSuffix != "" {
-		parseTenantFromRootDomain = sdkConfig.LoginURLTenantDomainSuffix
 	}
 
 	// Validate that required fields are present in the SDK config response
@@ -268,23 +276,9 @@ func (cr *ConfigResolver) validateAllDynamicConfigs(sdkConfig *SdkConfiguration)
 		return fmt.Errorf("the [redirect_uri] could not be resolved. Provide it explicitly in your SDK config or ensure your Wristband OAuth2 Client has a single redirect URI configured")
 	}
 
-	// Validate the tenant domain token logic with final resolved values
-	if parseTenantFromRootDomain != "" {
-		if !strings.Contains(loginURL, TenantDomainToken) {
-			return fmt.Errorf("the resolved [login_url] must contain the \"%s\" token when using [parse_tenant_from_root_domain]", TenantDomainToken)
-		}
-		if !strings.Contains(redirectURI, TenantDomainToken) {
-			return fmt.Errorf("the resolved [redirect_uri] must contain the \"%s\" token when using [parse_tenant_from_root_domain]", TenantDomainToken)
-		}
-	} else {
-		if strings.Contains(loginURL, TenantDomainToken) {
-			return fmt.Errorf("the resolved [login_url] cannot contain the \"%s\" token when [parse_tenant_from_root_domain] is absent", TenantDomainToken)
-		}
-		if strings.Contains(redirectURI, TenantDomainToken) {
-			return fmt.Errorf("the resolved [redirect_uri] cannot contain the \"%s\" token when [parse_tenant_from_root_domain] is absent", TenantDomainToken)
-		}
+	if manualLoginURL != "" || manualRedirectURI != "" {
+		return validateMatchingTenantPlaceholders(loginURL, redirectURI, "resolved ")
 	}
-
 	return nil
 }
 
@@ -397,11 +391,12 @@ func (cr *ConfigResolver) GetLoginURL() (string, error) {
 	return "", fmt.Errorf("the [login_url] config must have a value")
 }
 
-// GetParseTenantFromRootDomain returns the parse tenant from root domain config.
+// GetParseTenantFromRootDomain returns the root domain used for parsing tenant subdomains. It is derived from the
+// login URL by removing the {tenant_name} subdomain, and is empty when tenant subdomains are not in use.
 func (cr *ConfigResolver) GetParseTenantFromRootDomain() string {
-	// 1. Check if manually provided in authConfig
-	if cr.ParseTenantFromRootDomain != "" {
-		return cr.ParseTenantFromRootDomain
+	// 1. Derive from the manually provided login URL
+	if cr.SdkConfiguration != nil && cr.LoginURL != "" {
+		return deriveTenantRootDomain(cr.LoginURL)
 	}
 
 	// 2. If auto-configure is enabled, get from SDK config
@@ -433,4 +428,48 @@ func (cr *ConfigResolver) GetRedirectURI() string {
 
 	// 3. Default fallback
 	return ""
+}
+
+// GetApplicationAuthorizationRequestsEnabled returns whether application-level authorization requests are enabled.
+// It defaults to true.
+func (cr *ConfigResolver) GetApplicationAuthorizationRequestsEnabled() bool {
+	// 1. Check if manually provided in authConfig
+	if cr.applicationAuthorizationRequestsEnabled != nil {
+		return *cr.applicationAuthorizationRequestsEnabled
+	}
+	if cr.SdkConfiguration != nil && cr.ApplicationAuthorizationRequestsEnabled != nil {
+		return *cr.ApplicationAuthorizationRequestsEnabled
+	}
+
+	// 2. If auto-configure is enabled, get from SDK config
+	if cr.GetAutoConfigureEnabled() {
+		sdkConfig, err := cr.loadSdkConfig()
+		if err == nil && sdkConfig.ApplicationAuthorizationRequestsEnabled != nil {
+			return *sdkConfig.ApplicationAuthorizationRequestsEnabled
+		}
+	}
+
+	// 3. Default fallback
+	return true
+}
+
+// GetFallbackLoginURL returns the login URL without the {tenant_name} subdomain, which is used when a tenant
+// cannot be resolved and application-level authorization requests are enabled.
+func (cr *ConfigResolver) GetFallbackLoginURL() (string, error) {
+	// 1. Derive from the manually provided login URL
+	if cr.SdkConfiguration != nil && cr.LoginURL != "" {
+		return deriveFallbackLoginURL(cr.LoginURL), nil
+	}
+
+	// 2. If auto-configure is enabled, get from SDK config
+	if cr.GetAutoConfigureEnabled() {
+		sdkConfig, err := cr.loadSdkConfig()
+		if err != nil {
+			return "", err
+		}
+		return sdkConfig.FallbackLoginURL, nil
+	}
+
+	// 3. Default fallback
+	return "", nil
 }

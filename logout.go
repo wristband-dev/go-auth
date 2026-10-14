@@ -102,15 +102,32 @@ func (auth WristbandAuth) LogoutURL(req RequestURI, config LogoutConfig) (string
 			return "", err
 		}
 
+		// First try falling back to the logout redirect URL when the tenant cannot be resolved.
 		if config.redirectURL != "" {
 			return config.redirectURL, nil
 		}
+
+		// If app-level authorization requests are enabled, then redirect to the application's own Login Endpoint
+		// to start a new app-level authorization flow. That is the login URL without the {tenant_name}
+		// subdomain if it contains the placeholder, or the login URL as is otherwise.
+		if auth.configResolver.GetApplicationAuthorizationRequestsEnabled() {
+			loginURL, loginURLErr := auth.configResolver.GetLoginURL()
+			if loginURLErr != nil {
+				return "", loginURLErr
+			}
+			if !strings.Contains(loginURL, TenantNameToken) {
+				return loginURL, nil
+			}
+			return auth.configResolver.GetFallbackLoginURL()
+		}
+
+		// Otherwise, fall back to the custom or Wristband-hosted Application-Level Login Page.
 		customLogin, customLoginErr := auth.configResolver.GetCustomApplicationLoginPageURL()
 		if customLoginErr != nil {
 			return "", customLoginErr
 		}
 		if customLogin != "" {
-			return customLogin, nil
+			return fmt.Sprintf("%s?client_id=%s", customLogin, auth.Client.ClientID), nil
 		}
 		return fmt.Sprintf("https://%s/login?client_id=%s", auth.configResolver.WristbandApplicationVanityDomain, auth.Client.ClientID), nil
 	}

@@ -1,7 +1,6 @@
 package goauth
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -50,11 +49,6 @@ type AuthConfig struct {
 	// included in any cookie settings. This should only be done when testing in local development.
 	DangerouslyDisableSecureCookies bool `json:"dangerously_disable_secure_cookies"`
 
-	// ParseTenantFromRootDomain is the root domain for your application from which to parse
-	// out the tenant domain name. Indicates whether tenant subdomains are used for authentication.
-	// This field is auto-configurable.
-	ParseTenantFromRootDomain string `json:"parse_tenant_from_root_domain,omitempty"`
-
 	// Scopes are the scopes required for authentication. Defaults to ["openid", "offline_access", "email"]
 	Scopes []string `json:"scopes,omitempty"`
 
@@ -72,6 +66,10 @@ type AuthConfig struct {
 	// SdkConfiguration is the configuration that can be automatically configured using the Wristband configuration endpoint.
 	// Required when AutoConfigureEnabled is false. If auto-configure is enabled, then the static values will take precedence.
 	*SdkConfiguration
+
+	// applicationAuthorizationRequestsEnabled overrides the auto-configured value when set.
+	// See WithApplicationAuthorizationRequestsEnabled.
+	applicationAuthorizationRequestsEnabled *bool
 
 	httpClient *http.Client
 }
@@ -140,10 +138,13 @@ func WithAutoConfigurableConfigs(configuration SdkConfiguration) AuthConfigOptio
 	})
 }
 
-// WithParseTenantFromRootDomain sets the ParseTenantFromRootDomain field.
-func WithParseTenantFromRootDomain(rootDomain string) AuthConfigOption {
+// WithApplicationAuthorizationRequestsEnabled sets whether application-level authorization requests are enabled,
+// overriding the value from the SDK Auto-Configuration Endpoint. It defaults to true. When enabled, if login cannot
+// resolve a tenant from the request, the user is redirected to the Wristband Authorize Endpoint on the application
+// vanity domain, and Wristband handles tenant discovery within that same authorization flow.
+func WithApplicationAuthorizationRequestsEnabled(enabled bool) AuthConfigOption {
 	return authConfigOptionFunc(func(c *AuthConfig) {
-		c.ParseTenantFromRootDomain = rootDomain
+		c.applicationAuthorizationRequestsEnabled = &enabled
 	})
 }
 
@@ -196,17 +197,20 @@ func (ac *AuthConfig) Client() ConfidentialClient {
 	}
 }
 
-// RequestTenantName returns the tenant name from the request.
+// RequestTenantName returns the tenant name from the request. When tenant subdomains are in use, it is the
+// leftmost label of a host directly under the root domain, and is empty for any other host (including the bare
+// root domain). Otherwise, it is the tenant_name query parameter.
 func (auth WristbandAuth) RequestTenantName(req RequestURI) (string, error) {
-	if parseTenantName := auth.configResolver.GetParseTenantFromRootDomain(); parseTenantName != "" {
+	if rootDomain := auth.configResolver.GetParseTenantFromRootDomain(); rootDomain != "" {
 		host := req.Host()
 		if portIdx := strings.Index(host, ":"); portIdx > 0 {
 			host = host[:portIdx]
 		}
-		if !strings.HasSuffix(host, parseTenantName) {
-			return parseTenantName, fmt.Errorf("%s is not a valid tenant name", parseTenantName)
+		dotIdx := strings.Index(host, ".")
+		if dotIdx <= 0 || !strings.EqualFold(host[dotIdx+1:], rootDomain) {
+			return "", nil
 		}
-		return strings.TrimSuffix(host, "."+parseTenantName), nil
+		return host[:dotIdx], nil
 	}
 	return req.Query().Get("tenant_name"), nil
 }
@@ -266,7 +270,9 @@ const DefaultTokenExpirationBuffer = 60
 type SdkConfiguration struct {
 	// REQUIRED
 
-	// LoginURL is the URL for initiating the login request
+	// LoginURL is the URL for initiating the login request. If using tenant subdomains, it must contain the
+	// {tenant_name} placeholder exactly once, as the leftmost part of the hostname. The root domain for parsing
+	// tenant subdomains is derived from it by removing the {tenant_name} subdomain.
 	LoginURL string `json:"login_url"`
 
 	// CONDITIONAL - null if 2+ redirect URIs are configured for the OAuth2 Client in Wristband.
@@ -284,4 +290,12 @@ type SdkConfiguration struct {
 
 	// LoginURLTenantDomainSuffix is the tenant domain suffix for the login URL when using tenant subdomains
 	LoginURLTenantDomainSuffix string `json:"login_url_tenant_domain_suffix,omitempty"`
+
+	// ApplicationAuthorizationRequestsEnabled indicates whether application-level authorization requests are
+	// enabled. When nil, it defaults to true.
+	ApplicationAuthorizationRequestsEnabled *bool `json:"application_authorization_requests_enabled,omitempty"`
+
+	// FallbackLoginURL is the login URL without the {tenant_name} subdomain, used when a tenant cannot be resolved
+	// and application-level authorization requests are enabled.
+	FallbackLoginURL string `json:"fallback_login_url,omitempty"`
 }

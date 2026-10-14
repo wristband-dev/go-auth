@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 )
 
 // --- resolveReturnURL ---
@@ -33,14 +34,14 @@ func TestResolveReturnURL_FromOptions(t *testing.T) {
 	}
 }
 
-func TestResolveReturnURL_QueryOverridesOptions(t *testing.T) {
+func TestResolveReturnURL_OptionsOverrideQuery(t *testing.T) {
 	ctx := newMockHTTPContext()
 	ctx.queryValues.Set("return_url", "https://example.com/from-query")
 	opts := NewLoginOptions(WithReturnURL("https://example.com/from-options"))
 
 	got := opts.resolveReturnURL(ctx)
-	if got != "https://example.com/from-query" {
-		t.Errorf("Expected query URL to take precedence, got %q", got)
+	if got != "https://example.com/from-options" {
+		t.Errorf("Expected options URL to take precedence, got %q", got)
 	}
 }
 
@@ -266,8 +267,9 @@ func TestHandleLogin_TenantNameNotFound_VanityDomain(t *testing.T) {
 		AutoConfigureEnabled:             false,
 		Scopes:                           []string{"openid"},
 		SdkConfiguration: &SdkConfiguration{
-			LoginURL:    "https://app.wristband.dev/login",
-			RedirectURI: "https://app.example.com/callback",
+			ApplicationAuthorizationRequestsEnabled: boolPtr(false),
+			LoginURL:                                "https://app.wristband.dev/login",
+			RedirectURI:                             "https://app.example.com/callback",
 		},
 	}
 	auth, _ := authConfig.WristbandAuth()
@@ -299,9 +301,10 @@ func TestHandleLogin_TenantNameNotFound_CustomLoginPage(t *testing.T) {
 		AutoConfigureEnabled:             false,
 		Scopes:                           []string{"openid"},
 		SdkConfiguration: &SdkConfiguration{
-			LoginURL:                      "https://app.wristband.dev/login",
-			RedirectURI:                   "https://app.example.com/callback",
-			CustomApplicationLoginPageURL: "https://custom.example.com/login",
+			ApplicationAuthorizationRequestsEnabled: boolPtr(false),
+			LoginURL:                                "https://app.wristband.dev/login",
+			RedirectURI:                             "https://app.example.com/callback",
+			CustomApplicationLoginPageURL:           "https://custom.example.com/login",
 		},
 	}
 	auth, _ := authConfig.WristbandAuth()
@@ -711,15 +714,16 @@ func TestHandleCallback_TokenExchangeFailure(t *testing.T) {
 	}))
 	defer tokenServer.Close()
 
+	createdAt := time.Now().UnixMilli()
 	loginState := LoginState{
 		ReturnURL:      "https://example.com/return",
 		Nonce:          "test-nonce",
 		CodeVerifier:   "test-verifier",
 		StateCookieKey: "my-state-key",
-		CreatedAt:      1700000000000,
+		CreatedAt:      createdAt,
 	}
 	stateJSON, _ := json.Marshal(loginState)
-	cookieName := loginStateCookieName("my-state-key", 1700000000000)
+	cookieName := loginStateCookieName("my-state-key", createdAt)
 
 	enc := newMockCookieEncryption()
 	enc.encryptedValues[cookieName] = string(stateJSON)
@@ -757,15 +761,16 @@ func TestHandleCallback_TokenExchangeFailure(t *testing.T) {
 }
 
 func TestHandleCallback_Success(t *testing.T) {
+	createdAt := time.Now().UnixMilli()
 	loginState := LoginState{
 		ReturnURL:      "https://example.com/return",
 		Nonce:          "test-nonce",
 		CodeVerifier:   "test-verifier",
 		StateCookieKey: "my-state-key",
-		CreatedAt:      1700000000000,
+		CreatedAt:      createdAt,
 	}
 	stateJSON, _ := json.Marshal(loginState)
-	cookieName := loginStateCookieName("my-state-key", 1700000000000)
+	cookieName := loginStateCookieName("my-state-key", createdAt)
 
 	// Mock token + userinfo endpoints
 	mux := http.NewServeMux()

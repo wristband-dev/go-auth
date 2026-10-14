@@ -37,7 +37,7 @@ func TestNewAuthConfig_Defaults(t *testing.T) {
 func TestNewAuthConfig_WithOptions(t *testing.T) {
 	cfg := NewAuthConfig("cid", "csecret", "app.wristband.dev",
 		WithAutoConfigureDisabled("https://login.example.com", "https://app.example.com/callback"),
-		WithParseTenantFromRootDomain("example.com"),
+		WithApplicationAuthorizationRequestsEnabled(false),
 		WithLoginStateSecret("my-32-byte-secret-for-encryption"),
 		WithTokenExpirationBuffer(120),
 		WithConfigScopes([]string{"openid", "profile"}),
@@ -56,8 +56,8 @@ func TestNewAuthConfig_WithOptions(t *testing.T) {
 	if cfg.RedirectURI != "https://app.example.com/callback" {
 		t.Errorf("Expected RedirectURI %q, got %q", "https://app.example.com/callback", cfg.RedirectURI)
 	}
-	if cfg.ParseTenantFromRootDomain != "example.com" {
-		t.Errorf("Expected ParseTenantFromRootDomain %q, got %q", "example.com", cfg.ParseTenantFromRootDomain)
+	if cfg.applicationAuthorizationRequestsEnabled == nil || *cfg.applicationAuthorizationRequestsEnabled {
+		t.Error("Expected applicationAuthorizationRequestsEnabled to be set to false")
 	}
 	if cfg.LoginStateSecret != "my-32-byte-secret-for-encryption" {
 		t.Errorf("Expected custom LoginStateSecret, got %q", cfg.LoginStateSecret)
@@ -164,10 +164,9 @@ func TestRequestTenantName_FromSubdomain(t *testing.T) {
 		ClientSecret:                     "csecret",
 		WristbandApplicationVanityDomain: "app.wristband.dev",
 		AutoConfigureEnabled:             false,
-		ParseTenantFromRootDomain:        "example.com",
 		SdkConfiguration: &SdkConfiguration{
-			LoginURL:    "https://{tenant_domain}.app.wristband.dev/login",
-			RedirectURI: "https://{tenant_domain}.example.com/callback",
+			LoginURL:    "https://{tenant_name}.example.com/login",
+			RedirectURI: "https://{tenant_name}.example.com/callback",
 		},
 	}
 	auth, err := authConfig.WristbandAuth()
@@ -193,10 +192,9 @@ func TestRequestTenantName_SubdomainWithPort(t *testing.T) {
 		ClientSecret:                     "csecret",
 		WristbandApplicationVanityDomain: "app.wristband.dev",
 		AutoConfigureEnabled:             false,
-		ParseTenantFromRootDomain:        "example.com",
 		SdkConfiguration: &SdkConfiguration{
-			LoginURL:    "https://{tenant_domain}.app.wristband.dev/login",
-			RedirectURI: "https://{tenant_domain}.example.com/callback",
+			LoginURL:    "https://{tenant_name}.example.com/login",
+			RedirectURI: "https://{tenant_name}.example.com/callback",
 		},
 	}
 	auth, err := authConfig.WristbandAuth()
@@ -222,10 +220,9 @@ func TestRequestTenantName_InvalidSubdomain(t *testing.T) {
 		ClientSecret:                     "csecret",
 		WristbandApplicationVanityDomain: "app.wristband.dev",
 		AutoConfigureEnabled:             false,
-		ParseTenantFromRootDomain:        "example.com",
 		SdkConfiguration: &SdkConfiguration{
-			LoginURL:    "https://{tenant_domain}.app.wristband.dev/login",
-			RedirectURI: "https://{tenant_domain}.example.com/callback",
+			LoginURL:    "https://{tenant_name}.example.com/login",
+			RedirectURI: "https://{tenant_name}.example.com/callback",
 		},
 	}
 	auth, err := authConfig.WristbandAuth()
@@ -236,9 +233,12 @@ func TestRequestTenantName_InvalidSubdomain(t *testing.T) {
 	req := newMockHTTPRequest()
 	req.host = "acme.otherdomain.com"
 
-	_, err = auth.RequestTenantName(req)
-	if err == nil {
-		t.Error("Expected error for host not matching root domain")
+	tenantName, err := auth.RequestTenantName(req)
+	if err != nil {
+		t.Fatalf("RequestTenantName returned error: %v", err)
+	}
+	if tenantName != "" {
+		t.Errorf("Expected no tenant name for host not matching root domain, got %q", tenantName)
 	}
 }
 

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/url"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -16,6 +15,9 @@ import (
 type (
 	// LoginState represents the state during login process
 	LoginState struct {
+		// ReturnURL is the URL to return to after authentication is completed. In the CallbackContext returned by
+		// HandleCallback, it has been validated to prevent open redirects: it is empty if it pointed to a host other
+		// than the request's host or the root domain, or used a different scheme than the request.
 		ReturnURL      string `json:"return_url,omitempty"`
 		Nonce          string `json:"nonce,omitempty"`
 		CodeVerifier   string `json:"code_verifier,omitempty"`
@@ -89,23 +91,50 @@ func NewLoginOptions(opts ...LoginOpt) *LoginOptions {
 }
 
 // HandleLogin initiates the login process by creating a login state and returning the authorization url.
+//
+// When no tenant can be resolved from the request and application-level authorization requests are enabled (the
+// default), it returns the Wristband Authorize Endpoint URL on the application vanity domain, and Wristband
+// handles tenant discovery within that same authorization flow. When they are disabled, it returns the
+// Application-Level Login (Tenant Discovery) Page URL with the return URL in the state query parameter.
 func (auth WristbandAuth) HandleLogin(httpCtx HTTPContext, options *LoginOptions) (string, error) {
 	baseURL, err := auth.loginBaseURL(httpCtx, options)
 	if err != nil {
-		if errors.Is(err, ErrTenantNameNotFound) {
-			params := url.Values{}
-			params.Set("client_id", auth.Client.ClientID)
-			if returnURL := options.resolveReturnURL(httpCtx); returnURL != "" {
-				params.Set("state", strconv.Quote(returnURL))
-			}
-			if customURL, err := auth.configResolver.GetCustomApplicationLoginPageURL(); err == nil && customURL != "" {
-				return customURL + "?" + params.Encode(), nil
-			}
-			return "https://" + auth.configResolver.GetWristbandApplicationVanityDomain() + "/login?" + params.Encode(), nil
+		if !errors.Is(err, ErrTenantNameNotFound) {
+			return "", err
 		}
-		return "", err
+		if auth.configResolver.GetApplicationAuthorizationRequestsEnabled() {
+			return auth.startAuthorizeRequest(httpCtx, options, auth.configResolver.GetWristbandApplicationVanityDomain())
+		}
+		params := url.Values{}
+		params.Set("client_id", auth.Client.ClientID)
+		if returnURL := options.resolveReturnURL(httpCtx); returnURL != "" {
+			params.Set("state", returnURL)
+		}
+		if customURL, err := auth.configResolver.GetCustomApplicationLoginPageURL(); err == nil && customURL != "" {
+			return customURL + "?" + params.Encode(), nil
+		}
+		return "https://" + auth.configResolver.GetWristbandApplicationVanityDomain() + "/login?" + params.Encode(), nil
 	}
 
+	return auth.startAuthorizeRequest(httpCtx, options, baseURL)
+}
+
+// loginStateCookieDomain returns the domain for the login state cookie. With application-level authorization
+// requests and tenant subdomains, a login can start on the root domain and finish on a tenant subdomain, so the
+// cookie is set on the root domain. Otherwise, it is host-only.
+func (auth WristbandAuth) loginStateCookieDomain() string {
+	if auth.configResolver == nil {
+		return ""
+	}
+	if rootDomain := auth.configResolver.GetParseTenantFromRootDomain(); rootDomain != "" &&
+		auth.configResolver.GetApplicationAuthorizationRequestsEnabled() {
+		return "." + rootDomain
+	}
+	return ""
+}
+
+// startAuthorizeRequest creates the login state cookie and returns the Wristband Authorize Endpoint URL on baseURL.
+func (auth WristbandAuth) startAuthorizeRequest(httpCtx HTTPContext, options *LoginOptions, baseURL string) (string, error) {
 	// Create login state with nonce, PKCE code verifier, etc.
 	state := CreateLoginState(httpCtx.Query(), options)
 
@@ -120,10 +149,11 @@ func (auth WristbandAuth) HandleLogin(httpCtx HTTPContext, options *LoginOptions
 	}
 
 	// Cleanup old login state cookies - keep only the 2 most recent
-	auth.cleanupOldLoginCookies(httpCtx)
+	cookieDomain := auth.loginStateCookieDomain()
+	auth.cleanupOldLoginCookies(httpCtx, cookieDomain)
 
 	// Store login state in a cookie
-	if err := httpCtx.WriteCookie(cookieName, cookieValue); err != nil {
+	if err := writeCookie(httpCtx, cookieName, cookieValue, cookieDomain); err != nil {
 		return "", fmt.Errorf("failed to write login state cookie: %v", err)
 	}
 	opts := []AuthorizeRequestOption{
@@ -146,8 +176,9 @@ func (auth WristbandAuth) HandleLogin(httpCtx HTTPContext, options *LoginOptions
 const ReturnURLMaxLength = 450
 
 func (options *LoginOptions) resolveReturnURL(req HTTPContext) string {
+	// The return URL from the LoginOptions takes priority over the query param.
 	returnURL := req.Query().Get("return_url")
-	if returnURL == "" && options != nil && options.returnURL != "" {
+	if options != nil && options.returnURL != "" {
 		returnURL = options.returnURL
 	}
 	if len(returnURL) > ReturnURLMaxLength {
@@ -184,7 +215,7 @@ func (auth WristbandAuth) loginBaseURL(req HTTPContext, options *LoginOptions) (
 }
 
 // cleanupOldLoginCookies removes all but the 2 most recent login state cookies.
-func (auth WristbandAuth) cleanupOldLoginCookies(httpCtx HTTPContext) {
+func (auth WristbandAuth) cleanupOldLoginCookies(httpCtx HTTPContext, cookieDomain string) {
 	type cookieWithTimestamp struct {
 		name      string
 		timestamp int64
@@ -222,7 +253,7 @@ func (auth WristbandAuth) cleanupOldLoginCookies(httpCtx HTTPContext) {
 
 	// Clear all but the 2 most recent
 	for i := 2; i < len(loginCookies); i++ {
-		httpCtx.ClearCookie(loginCookies[i].name)
+		clearCookie(httpCtx, loginCookies[i].name, cookieDomain)
 	}
 }
 
@@ -277,31 +308,54 @@ func (auth WristbandAuth) HandleCallback(httpCtx HTTPContext) (*CallbackContext,
 	if inputs.Code == "" {
 		return nil, InvalidParameterError("code")
 	}
+	rootDomain := auth.configResolver.GetParseTenantFromRootDomain()
 	if inputs.TenantName == "" {
-		if auth.configResolver.GetParseTenantFromRootDomain() != "callback request URL is missing a tenant subdomain" {
-			return nil, NewWristbandError("missing_tenant_subdomain", "")
+		if rootDomain != "" {
+			return nil, NewWristbandError("missing_tenant_subdomain", "callback request URL is missing a tenant subdomain")
 		}
-		return nil, NewWristbandError("missing_tenant_domain", "callback request is missing the [tenant_domain] query parameter from Wristband")
+		return nil, NewWristbandError("missing_tenant_name", "callback request is missing the [tenant_name] query parameter from Wristband")
 	}
 	loginURL, err := auth.configResolver.GetLoginURL()
 	if err != nil {
 		return nil, err
 	}
 	queryVals := url.Values{}
-	if auth.configResolver.GetParseTenantFromRootDomain() != "" {
-		loginURL = strings.ReplaceAll(loginURL, TenantDomainToken, inputs.TenantName)
+	if rootDomain != "" {
+		loginURL = strings.ReplaceAll(loginURL, TenantNameToken, inputs.TenantName)
 	} else {
 		queryVals.Set("tenant_name", inputs.TenantName)
 	}
 	if inputs.TenantCustomDomain != "" {
 		queryVals.Set("tenant_custom_domain", inputs.TenantCustomDomain)
 	}
-	tenantURL := loginURL + "?" + queryVals.Encode()
+	tenantURL := loginURL
+	if len(queryVals) > 0 {
+		tenantURL += "?" + queryVals.Encode()
+	}
 
+	// A login state cookie that is missing, can't be decrypted (tampered or encrypted with a different secret),
+	// or is older than its lifetime can't be trusted, so restart the login.
 	loginState, err := GetLoginStateCookie(auth.cookieEncryption, httpCtx)
 	if err != nil {
 		return nil, NewRedirectError("failed to retrieve login state", tenantURL)
 	}
+	if isLoginStateExpired(loginState, time.Now()) {
+		return nil, NewRedirectError("login state expired", tenantURL)
+	}
+
+	// Prevent open redirects by validating the return URL against allowed hosts.
+	scheme := "https"
+	if schemeResolver, ok := httpCtx.(RequestScheme); ok {
+		scheme = schemeResolver.Scheme()
+	}
+	loginState.ReturnURL = validateReturnURL(
+		loginState.ReturnURL,
+		scheme,
+		httpCtx.Host(),
+		inputs.TenantName,
+		auth.configResolver.GetApplicationAuthorizationRequestsEnabled(),
+		rootDomain,
+	)
 
 	tokenReq := auth.CodeTokenRequest(inputs.Code, loginState.CodeVerifier)
 

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/wristband-dev/go-auth/cookies"
 )
@@ -17,6 +18,18 @@ type (
 		ReadEncrypted(r cookies.CookieRequest, name string) (string, error)
 		// EncryptCookieValue encrypts a cookie value with the given name.
 		EncryptCookieValue(name, value string) (string, error)
+	}
+
+	// DomainCookieWriter is optionally implemented by an HTTPContext that can write and clear cookies on a specific
+	// domain. The SDK uses it to set the login state cookie on the root domain when application-level authorization
+	// requests are enabled and tenant subdomains are in use, so that a login that starts on the root domain can
+	// finish on a tenant subdomain. StandardHTTP implements it. HTTPContext implementations that don't implement it
+	// fall back to WriteCookie and ClearCookie.
+	DomainCookieWriter interface {
+		// WriteCookieWithDomain writes a cookie to the HTTP response on the given domain.
+		WriteCookieWithDomain(name, value, domain string) error
+		// ClearCookieWithDomain clears a cookie on the given domain from the HTTP response.
+		ClearCookieWithDomain(name, domain string)
 	}
 
 	// CookieOptions holds optional configuration for cookies that are written to the HTTP response.
@@ -38,7 +51,36 @@ type (
 const (
 	// LoginStateCookiePrefix is the prefix used for the name of the cookie used to store the login metadata.
 	LoginStateCookiePrefix = "login#"
+
+	// loginStateMaxAge is the lifetime of the login state, which matches the login state cookie's Max-Age.
+	loginStateMaxAge = time.Hour
+	// loginStateClockSkew is the clock skew tolerance applied when checking the login state's lifetime.
+	loginStateClockSkew = time.Minute
 )
+
+// writeCookie writes a cookie on the given domain when the HTTPContext supports it, and host-only otherwise.
+func writeCookie(httpCtx HTTPContext, name, value, domain string) error {
+	if writer, ok := httpCtx.(DomainCookieWriter); ok && domain != "" {
+		return writer.WriteCookieWithDomain(name, value, domain)
+	}
+	return httpCtx.WriteCookie(name, value)
+}
+
+// clearCookie clears a cookie on the given domain when the HTTPContext supports it, and host-only otherwise.
+func clearCookie(httpCtx HTTPContext, name, domain string) {
+	if writer, ok := httpCtx.(DomainCookieWriter); ok && domain != "" {
+		writer.ClearCookieWithDomain(name, domain)
+		return
+	}
+	httpCtx.ClearCookie(name)
+}
+
+// isLoginStateExpired reports whether a login state was created longer ago than its lifetime, or in the future,
+// allowing for some clock skew.
+func isLoginStateExpired(state LoginState, now time.Time) bool {
+	createdAt := time.UnixMilli(state.CreatedAt)
+	return now.Sub(createdAt) > loginStateMaxAge+loginStateClockSkew || createdAt.Sub(now) > loginStateClockSkew
+}
 
 // Cookie handling functions
 

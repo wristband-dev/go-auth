@@ -187,8 +187,9 @@ func TestWristbandAuth_LogoutURL_NoTenantedHost_NoLogoutRedirectURI(t *testing.T
 		AutoConfigureEnabled:             false,
 		Scopes:                           []string{"openid"},
 		SdkConfiguration: &SdkConfiguration{
-			LoginURL:    "https://test.wristband.com/login",
-			RedirectURI: "http://example.com/callback",
+			ApplicationAuthorizationRequestsEnabled: boolPtr(false),
+			LoginURL:                                "https://test.wristband.com/login",
+			RedirectURI:                             "http://example.com/callback",
 		},
 	}
 	auth, _ := authConfig.WristbandAuth()
@@ -361,10 +362,9 @@ func TestWristbandAuth_LogoutURL_ParseTenantFromRootDomain(t *testing.T) {
 		WristbandApplicationVanityDomain: "test.wristband.com",
 		AutoConfigureEnabled:             false,
 		Scopes:                           []string{"openid"},
-		ParseTenantFromRootDomain:        "example.com",
 		SdkConfiguration: &SdkConfiguration{
-			LoginURL:    "https://{tenant_domain}.test.wristband.com/login", // Need {tenant_domain} token
-			RedirectURI: "http://{tenant_domain}.example.com/callback",      // Need {tenant_domain} token
+			LoginURL:    "https://{tenant_name}.example.com/login",
+			RedirectURI: "https://{tenant_name}.example.com/callback",
 		},
 	}
 	auth, err := authConfig.WristbandAuth()
@@ -490,8 +490,9 @@ func TestWristbandAuth_LogoutURL_EmptyTenantDomain(t *testing.T) {
 		AutoConfigureEnabled:             false,
 		Scopes:                           []string{"openid"},
 		SdkConfiguration: &SdkConfiguration{
-			LoginURL:    "https://test.wristband.com/login",
-			RedirectURI: "http://example.com/callback",
+			ApplicationAuthorizationRequestsEnabled: boolPtr(false),
+			LoginURL:                                "https://test.wristband.com/login",
+			RedirectURI:                             "http://example.com/callback",
 		},
 	}
 	resolver, _ := NewConfigResolver(authConfig)
@@ -752,9 +753,10 @@ func TestLogoutURL_NoTenant_WithCustomLoginPage(t *testing.T) {
 		AutoConfigureEnabled:             false,
 		Scopes:                           []string{"openid"},
 		SdkConfiguration: &SdkConfiguration{
-			LoginURL:                      "https://test.wristband.com/login",
-			RedirectURI:                   "http://example.com/callback",
-			CustomApplicationLoginPageURL: "https://custom-login.example.com",
+			ApplicationAuthorizationRequestsEnabled: boolPtr(false),
+			LoginURL:                                "https://test.wristband.com/login",
+			RedirectURI:                             "http://example.com/callback",
+			CustomApplicationLoginPageURL:           "https://custom-login.example.com",
 		},
 	}
 	auth, err := authConfig.WristbandAuth()

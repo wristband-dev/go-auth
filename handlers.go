@@ -137,6 +137,8 @@ func (app WristbandApp) CallbackHandler(opts ...CallbackOption) http.HandlerFunc
 		callbackContext, err := app.HandleCallback(ctx)
 		if err != nil {
 			if redirectError, ok := IsRedirectError(err); ok {
+				// Clear the login state cookies so a fresh login can start.
+				app.clearAllLoginCookies(ctx)
 				http.Redirect(res, req, redirectError.URL, http.StatusSeeOther)
 				return
 			}
@@ -150,13 +152,10 @@ func (app WristbandApp) CallbackHandler(opts ...CallbackOption) http.HandlerFunc
 			return
 		}
 
-		// Clear login state cookie
-		ctx.ClearCookie(callbackContext.LoginState.CookieName())
-
-		// Clear any other remaining old login cookies
+		// Clear the login state cookie and any other remaining old login cookies
 		app.clearAllLoginCookies(ctx)
 
-		// Redirect to return URL or default location
+		// Redirect to the validated return URL or default location
 		redirectURL := "/"
 		if cfg.redirectURL != "" {
 			redirectURL = cfg.redirectURL
@@ -171,10 +170,11 @@ func (app WristbandApp) CallbackHandler(opts ...CallbackOption) http.HandlerFunc
 
 // clearAllLoginCookies removes all login state cookies from the request.
 func (app WristbandApp) clearAllLoginCookies(ctx HTTPContext) {
+	cookieDomain := app.loginStateCookieDomain()
 	allCookieNames := ctx.CookieRequest().Cookies()
 	for _, cookieName := range allCookieNames {
 		if strings.HasPrefix(cookieName, LoginStateCookiePrefix) {
-			ctx.ClearCookie(cookieName)
+			clearCookie(ctx, cookieName, cookieDomain)
 		}
 	}
 }

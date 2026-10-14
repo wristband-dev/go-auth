@@ -101,6 +101,14 @@ func (c *ConfidentialClient) GetSdkConfiguration() (*SdkConfiguration, error) {
 			sdkConfig.LoginURLTenantDomainSuffix = tenantDomainSuffix
 		}
 
+		if appAuthRequestsEnabled, ok := response["applicationAuthorizationRequestsEnabled"].(bool); ok {
+			sdkConfig.ApplicationAuthorizationRequestsEnabled = &appAuthRequestsEnabled
+		}
+
+		if fallbackLoginURL, ok := response["fallbackLoginUrl"].(string); ok {
+			sdkConfig.FallbackLoginURL = fallbackLoginURL
+		}
+
 		return sdkConfig, nil
 	})
 }
